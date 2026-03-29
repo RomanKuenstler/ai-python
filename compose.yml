@@ -1,0 +1,39 @@
+services:
+  retriever:
+  embedder:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: rag
+      POSTGRES_USER: rag
+      POSTGRES_PASSWORD: rag
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U rag -d rag"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  qdrant:
+    image: qdrant/qdrant
+    container_name: qdrant
+    ports:
+      - "6333:6333"
+    volumes:
+      - qdrant_data:/qdrant/storage
+
+volumes:
+  qdrant_data:
+  rag_state:
+  postgres_data:
+
+models:
+  chat-model:
+    model: hf.co/Qwen/Qwen2.5-Coder-3B-Instruct-GGUF:Q4_K_M
+  embedding-model:
+    model: ai/embeddinggemma:latest
+  audio-model:
+    model: hf.co/openai/whisper-small
