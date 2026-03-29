@@ -64,6 +64,7 @@ services:
       - "5173:5173"
     volumes:
       - ./webui:/app/webui
+      - webui_node_modules:/app/webui/node_modules
 
   postgres:
     image: postgres:16-alpine
@@ -91,3 +92,4 @@ services:
 volumes:
   qdrant_data:
   postgres_data:
+  webui_node_modules:

@@ -1,9 +1,10 @@
-FROM node:20-alpine
+FROM node:20-slim
 
 WORKDIR /app/webui
 
 COPY webui/package.json /app/webui/package.json
-RUN npm install
+COPY webui/package-lock.json /app/webui/package-lock.json
+RUN npm ci
 
 COPY webui /app/webui
 
