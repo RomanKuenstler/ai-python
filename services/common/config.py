@@ -41,6 +41,12 @@ class Settings:
     retrieval_min_results: int = _get_int("RETRIEVAL_MIN_RESULTS", 2)
     retrieval_max_results: int = _get_int("RETRIEVAL_MAX_RESULTS", 8)
     history_limit: int = _get_int("CHAT_HISTORY_LIMIT", _get_int("HISTORY_LIMIT", 5))
+    api_host: str = os.getenv("API_HOST", "0.0.0.0")
+    api_port: int = _get_int("API_PORT", 8000)
+    cors_allowed_origins: str = os.getenv(
+        "CORS_ALLOWED_ORIGINS",
+        "http://localhost:5173,http://localhost:3000",
+    )
     enable_ocr: bool = _get_bool("ENABLE_OCR", True)
     pdf_ocr_mode: str = os.getenv("PDF_OCR_MODE", "fallback").lower()
     pdf_min_extracted_chars: int = _get_int("PDF_MIN_EXTRACTED_CHARS", 500)

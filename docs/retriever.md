@@ -1,11 +1,14 @@
 # Retriever
 
-The retriever is a CLI-first chat service for Step 2.
+The retriever now has two entry points:
+
+- a FastAPI service for the Step 3 web UI
+- the earlier CLI flow for direct developer testing
 
 ## Runtime Flow
 
-1. Start the service and open a new session id.
-2. Accept a user question in the terminal.
+1. Resolve the active chat.
+2. Persist the user prompt.
 3. Embed the query with the configured embedding model endpoint.
 4. Search Qdrant for scored vector matches.
 5. Drop candidates below `RETRIEVAL_SCORE_THRESHOLD`.
@@ -15,11 +18,11 @@ The retriever is a CLI-first chat service for Step 2.
    - `prompts/guardrails.md`
    - `prompts/assistant.md`
    - `prompts/ragcontext.md`
-   - recent chat history
+   - recent history for the same chat only
    - the live user message
 9. Call the configured local LLM endpoint.
-10. Store user message, assistant message, and retrieval evidence in PostgreSQL.
-11. Print a source section below the answer in the same order the chunks were used.
+10. Store the assistant message and retrieval evidence in PostgreSQL.
+11. Return structured JSON to the web UI or print the formatted source section in the CLI.
 
 ## Score Semantics
 
@@ -28,6 +31,15 @@ Qdrant is configured with cosine similarity. The implementation normalizes the r
 ## Empty Retrieval
 
 If no chunk passes the threshold, the retriever still calls the LLM with a `No evidence retrieved.` context so the assistant can answer cautiously.
+
+## API Endpoints
+
+- `GET /api/health`
+- `POST /api/chats`
+- `GET /api/chats`
+- `GET /api/chats/{chat_id}`
+- `GET /api/chats/{chat_id}/messages`
+- `POST /api/chats/{chat_id}/messages`
 
 ## Source Display
 

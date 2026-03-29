@@ -52,12 +52,20 @@ The PostgreSQL schema is initialized automatically on service startup.
 - `created_at`
 - `updated_at`
 
+### `chats`
+
+- `id`
+- `chat_name`
+- `created_at`
+- `updated_at`
+
 ### `chat_messages`
 
 - `id`
 - `session_id`
 - `role`
 - `content`
+- `status`
 - `created_at`
 
 ### `retrieval_logs`
@@ -82,5 +90,6 @@ The PostgreSQL schema is initialized automatically on service startup.
 
 - `files` captures both the indexed source state and the processing configuration that produced it.
 - `chunks` stores semantic metadata so retrieval sources can be rendered in the CLI and stale chunks can be recreated safely.
-- `chat_messages` stores the CLI conversation transcript.
+- `chats` stores chat metadata for the Step 3 multi-chat UI.
+- `chat_messages` stores both Step 3 web conversations and the optional CLI transcript.
 - `retrieval_logs` stores only chunks that were actually inserted into the final RAG context for an answer.

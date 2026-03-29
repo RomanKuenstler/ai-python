@@ -18,3 +18,11 @@
 - Updated the retriever CLI to print source metadata below each answer and expanded retrieval logging accordingly.
 - Added Step 2 docs for parsers, OCR, metadata, testing, and refreshed the existing setup, architecture, embedder, retriever, and database docs.
 - Added focused pytest coverage and smoke-test guidance for the Step 2 ingestion and source-formatting paths.
+
+## 2026-03-29 02:00 UTC
+
+- Refactored the retriever into reusable chat, repository, schema, and service layers and added a FastAPI entry point for Step 3.
+- Added persisted chat metadata, chat-scoped message loading, assistant source lookups, and API responses tailored for the web UI.
+- Added a React + Vite frontend with sidebar chat navigation, optimistic message sending, loading/error handling, and per-answer Sources panels.
+- Updated Docker Compose, environment examples, and service images to run the web UI and retriever API together.
+- Added Step 3 documentation for the frontend, API, chat model, setup, testing, and updated database/retriever notes.

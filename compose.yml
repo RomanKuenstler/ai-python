@@ -15,6 +15,23 @@ services:
       - .:/app
     restart: unless-stopped
 
+  retriever-api:
+    build:
+      context: .
+      dockerfile: services/retriever/Dockerfile
+    env_file:
+      - .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      qdrant:
+        condition: service_started
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/app/data
+      - .:/app
+
   retriever:
     build:
       context: .
@@ -26,11 +43,27 @@ services:
         condition: service_healthy
       qdrant:
         condition: service_started
+    command: ["python", "-m", "services.retriever.main"]
     stdin_open: true
     tty: true
+    profiles: ["cli"]
     volumes:
       - ./data:/app/data
       - .:/app
+
+  webui:
+    build:
+      context: .
+      dockerfile: webui/Dockerfile
+    depends_on:
+      retriever-api:
+        condition: service_started
+    environment:
+      VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8000}
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./webui:/app/webui
 
   postgres:
     image: postgres:16-alpine

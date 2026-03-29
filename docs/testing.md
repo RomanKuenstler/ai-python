@@ -17,6 +17,7 @@ The current test coverage focuses on:
 - extraction quality heuristics
 - EPUB front matter and repeated chrome handling
 - retriever source formatting
+- Step 3 API contract coverage
 
 ## Smoke Checks
 
@@ -45,6 +46,14 @@ for rel in ["AI_IPS.md", "Developing with Docker.pdf", "Deployment with Docker.e
 PY
 ```
 
+Frontend build smoke check:
+
+```bash
+cd webui
+npm install
+npm run build
+```
+
 ## What Was Verified
 
 - `.html` and `.htm` extraction logic through unit coverage
@@ -52,10 +61,25 @@ PY
 - direct PDF extraction on the sample digital PDF
 - EPUB spine-order extraction and front-matter cleanup on the sample EPUB
 - CLI source rendering format
+- FastAPI health, chat listing, message posting, and source payload shape
+
+## Step 3 Smoke Test
+
+1. Run `docker compose up --build`.
+2. Open `http://localhost:5173`.
+3. Create multiple chats from the sidebar.
+4. Send one message in chat A and a different message in chat B.
+5. Switch between chats and confirm histories stay isolated.
+6. Watch the assistant loading state appear and get replaced by the final answer.
+7. Open the `Sources` panel below an assistant answer and confirm metadata is shown.
+8. Refresh the page and confirm the chats and messages still load.
+9. Optionally run `docker compose --profile cli run --rm retriever` to confirm the legacy CLI path still works.
 
 ## Debugging Tips
 
 - If retrieval sources are empty, inspect `RETRIEVAL_SCORE_THRESHOLD`.
+- If the web UI cannot reach the API, verify `VITE_API_BASE_URL`, `API_PORT`, and Docker port publishing.
+- If a chat opens with no history after refresh, confirm PostgreSQL is healthy and `chat_messages.session_id` rows exist for that chat.
 - If a file keeps reprocessing, compare the stored processing signature fields in `files`.
 - If a PDF produces no chunks, inspect the stored `processing_status`, `processing_error`, and `extraction_quality`.
 - If OCR is required, validate the embedder Docker image rather than the host Python environment.

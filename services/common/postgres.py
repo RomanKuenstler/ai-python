@@ -4,10 +4,10 @@ from contextlib import contextmanager
 from datetime import datetime, timezone
 from typing import Iterator
 
-from sqlalchemy import create_engine, delete, select
+from sqlalchemy import create_engine, delete, inspect, select, text
 from sqlalchemy.orm import Session, sessionmaker
 
-from services.common.models import Base, ChatMessage, ChunkRecord, FileRecord, RetrievalLog
+from services.common.models import Base, ChatMessage, ChatSession, ChunkRecord, FileRecord, RetrievalLog
 from services.common.retry import retry
 
 
@@ -18,6 +18,18 @@ class PostgresClient:
 
     def initialize(self) -> None:
         retry(lambda: Base.metadata.create_all(self.engine))
+        self._ensure_legacy_columns()
+
+    def _ensure_legacy_columns(self) -> None:
+        inspector = inspect(self.engine)
+        if "chat_messages" not in inspector.get_table_names():
+            return
+
+        columns = {column["name"] for column in inspector.get_columns("chat_messages")}
+        if "status" not in columns:
+            with self.engine.begin() as connection:
+                connection.execute(text("ALTER TABLE chat_messages ADD COLUMN status VARCHAR(32) DEFAULT 'completed'"))
+                connection.execute(text("UPDATE chat_messages SET status = 'completed' WHERE status IS NULL"))
 
     @contextmanager
     def session(self) -> Iterator[Session]:
@@ -60,7 +72,10 @@ class PostgresClient:
                 session.flush()
 
             for chunk in chunks:
-                session.add(ChunkRecord(file_id=record.id, **chunk))
+                chunk_payload = dict(chunk)
+                if "metadata" in chunk_payload:
+                    chunk_payload["chunk_metadata"] = chunk_payload.pop("metadata")
+                session.add(ChunkRecord(file_id=record.id, **chunk_payload))
 
             session.flush()
             session.refresh(record)
@@ -74,13 +89,54 @@ class PostgresClient:
             session.delete(record)
             return record
 
-    def add_chat_message(self, session_id: str, role: str, content: str) -> ChatMessage:
+    def ensure_chat(self, chat_id: str, chat_name: str) -> ChatSession:
         with self.session() as session:
-            message = ChatMessage(session_id=session_id, role=role, content=content)
+            chat = session.get(ChatSession, chat_id)
+            if chat is None:
+                chat = ChatSession(id=chat_id, chat_name=chat_name)
+                session.add(chat)
+                session.flush()
+                session.refresh(chat)
+            return chat
+
+    def create_chat(self, chat_name: str, chat_id: str | None = None) -> ChatSession:
+        with self.session() as session:
+            chat = ChatSession(id=chat_id or None, chat_name=chat_name)
+            session.add(chat)
+            session.flush()
+            session.refresh(chat)
+            return chat
+
+    def list_chats(self) -> list[ChatSession]:
+        with self.session() as session:
+            rows = session.scalars(select(ChatSession).order_by(ChatSession.updated_at.desc(), ChatSession.created_at.desc()))
+            return list(rows)
+
+    def get_chat(self, chat_id: str) -> ChatSession | None:
+        with self.session() as session:
+            return session.get(ChatSession, chat_id)
+
+    def touch_chat(self, chat_id: str) -> None:
+        with self.session() as session:
+            chat = session.get(ChatSession, chat_id)
+            if chat is not None:
+                chat.updated_at = datetime.now(timezone.utc)
+
+    def add_chat_message(self, session_id: str, role: str, content: str, status: str = "completed") -> ChatMessage:
+        with self.session() as session:
+            message = ChatMessage(session_id=session_id, role=role, content=content, status=status)
             session.add(message)
+            self._touch_chat_in_session(session, session_id)
             session.flush()
             session.refresh(message)
             return message
+
+    def get_chat_messages(self, chat_id: str) -> list[ChatMessage]:
+        with self.session() as session:
+            rows = session.scalars(
+                select(ChatMessage).where(ChatMessage.session_id == chat_id).order_by(ChatMessage.created_at.asc(), ChatMessage.id.asc())
+            )
+            return list(rows)
 
     def get_recent_chat_history(self, session_id: str, limit: int) -> list[ChatMessage]:
         with self.session() as session:
@@ -91,6 +147,20 @@ class PostgresClient:
                 .limit(limit * 2)
             )
             return list(reversed(list(rows)))
+
+    def get_retrieval_logs_for_assistant_messages(self, assistant_message_ids: list[int]) -> dict[int, list[RetrievalLog]]:
+        if not assistant_message_ids:
+            return {}
+        with self.session() as session:
+            rows = session.scalars(
+                select(RetrievalLog)
+                .where(RetrievalLog.assistant_message_id.in_(assistant_message_ids))
+                .order_by(RetrievalLog.assistant_message_id.asc(), RetrievalLog.id.asc())
+            )
+            grouped: dict[int, list[RetrievalLog]] = {}
+            for row in rows:
+                grouped.setdefault(row.assistant_message_id, []).append(row)
+            return grouped
 
     def add_retrieval_logs(
         self,
@@ -119,3 +189,9 @@ class PostgresClient:
                         retrieval_score=float(chunk["score"]),
                     )
                 )
+            self._touch_chat_in_session(session, session_id)
+
+    def _touch_chat_in_session(self, session: Session, chat_id: str) -> None:
+        chat = session.get(ChatSession, chat_id)
+        if chat is not None:
+            chat.updated_at = datetime.now(timezone.utc)
