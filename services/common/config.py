@@ -12,6 +12,13 @@ def _get_float(name: str, default: float) -> float:
     return float(os.getenv(name, str(default)))
 
 
+def _get_bool(name: str, default: bool) -> bool:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
 @dataclass(slots=True)
 class Settings:
     postgres_db: str = os.getenv("POSTGRES_DB", "rag")
@@ -33,7 +40,27 @@ class Settings:
     retrieval_score_threshold: float = _get_float("RETRIEVAL_SCORE_THRESHOLD", 0.70)
     retrieval_min_results: int = _get_int("RETRIEVAL_MIN_RESULTS", 2)
     retrieval_max_results: int = _get_int("RETRIEVAL_MAX_RESULTS", 8)
-    history_limit: int = _get_int("HISTORY_LIMIT", 5)
+    history_limit: int = _get_int("CHAT_HISTORY_LIMIT", _get_int("HISTORY_LIMIT", 5))
+    enable_ocr: bool = _get_bool("ENABLE_OCR", True)
+    pdf_ocr_mode: str = os.getenv("PDF_OCR_MODE", "fallback").lower()
+    pdf_min_extracted_chars: int = _get_int("PDF_MIN_EXTRACTED_CHARS", 500)
+    pdf_min_avg_chars_per_page: int = _get_int("PDF_MIN_AVG_CHARS_PER_PAGE", 150)
+    pdf_enable_column_detection: bool = _get_bool("PDF_ENABLE_COLUMN_DETECTION", True)
+    pdf_render_scale: float = _get_float("PDF_RENDER_SCALE", 2.0)
+    ocr_language: str = os.getenv("OCR_LANGUAGE", "eng")
+    ocr_enable_preprocessing: bool = _get_bool("OCR_ENABLE_PREPROCESSING", True)
+    ocr_preprocess_grayscale: bool = _get_bool("OCR_PREPROCESS_GRAYSCALE", True)
+    ocr_preprocess_threshold: bool = _get_bool("OCR_PREPROCESS_THRESHOLD", True)
+    ocr_preprocess_denoise: bool = _get_bool("OCR_PREPROCESS_DENOISE", False)
+    ocr_preprocess_contrast: bool = _get_bool("OCR_PREPROCESS_CONTRAST", True)
+    html_cleaning_strict: bool = _get_bool("HTML_CLEANING_STRICT", True)
+    epub_skip_front_matter: bool = _get_bool("EPUB_SKIP_FRONT_MATTER", True)
+    epub_remove_repeated_chrome: bool = _get_bool("EPUB_REMOVE_REPEATED_CHROME", True)
+    epub_fallback_scan_enabled: bool = _get_bool("EPUB_FALLBACK_SCAN_ENABLED", True)
+    index_schema_version: int = _get_int("INDEX_SCHEMA_VERSION", 2)
+    processor_version: int = _get_int("PROCESSOR_VERSION", 2)
+    normalization_version: int = _get_int("NORMALIZATION_VERSION", 2)
+    extraction_strategy_version: int = _get_int("EXTRACTION_STRATEGY_VERSION", _get_int("PROCESSOR_VERSION", 2))
     log_level: str = os.getenv("LOG_LEVEL", "INFO")
     data_dir: str = os.getenv("DATA_DIR", "/app/data")
 
@@ -43,6 +70,24 @@ class Settings:
             f"postgresql+psycopg2://{self.postgres_user}:{self.postgres_password}"
             f"@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
         )
+
+    @property
+    def processing_signature(self) -> str:
+        parts = [
+            f"chunk_size={self.chunk_size}",
+            f"chunk_overlap={self.chunk_overlap}",
+            f"index_schema_version={self.index_schema_version}",
+            f"processor_version={self.processor_version}",
+            f"normalization_version={self.normalization_version}",
+            f"extraction_strategy_version={self.extraction_strategy_version}",
+            f"pdf_ocr_mode={self.pdf_ocr_mode}",
+            f"enable_ocr={self.enable_ocr}",
+            f"html_cleaning_strict={self.html_cleaning_strict}",
+            f"epub_skip_front_matter={self.epub_skip_front_matter}",
+            f"epub_remove_repeated_chrome={self.epub_remove_repeated_chrome}",
+            f"epub_fallback_scan_enabled={self.epub_fallback_scan_enabled}",
+        ]
+        return "|".join(parts)
 
 
 def get_settings() -> Settings:

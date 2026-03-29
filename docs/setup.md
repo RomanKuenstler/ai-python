@@ -12,7 +12,7 @@ The repository defaults point to Docker Model Runner on `http://host.docker.inte
 
 1. Copy `.env.example` to `.env`.
 2. Review the model endpoint and model-name settings.
-3. Add `.md` and `.txt` files to `data/`.
+3. Add `.md`, `.txt`, `.html`, `.htm`, `.pdf`, or `.epub` files to `data/`.
 4. Optionally map tags in `data/tags.json`.
 5. Start indexing and infrastructure:
 
@@ -34,9 +34,25 @@ docker compose run --rm retriever
 - `RETRIEVAL_SCORE_THRESHOLD`
 - `RETRIEVAL_MIN_RESULTS`
 - `RETRIEVAL_MAX_RESULTS`
-- `HISTORY_LIMIT`
+- `CHAT_HISTORY_LIMIT`
 - `QDRANT_COLLECTION`
 - `EMBEDDING_MODEL`
 - `EMBEDDING_BASE_URL`
 - `LLM_MODEL`
 - `LLM_BASE_URL`
+- `ENABLE_OCR`
+- `PDF_OCR_MODE`
+- `PDF_MIN_EXTRACTED_CHARS`
+- `PDF_MIN_AVG_CHARS_PER_PAGE`
+- `PDF_ENABLE_COLUMN_DETECTION`
+- `PDF_RENDER_SCALE`
+- `OCR_LANGUAGE`
+- `OCR_ENABLE_PREPROCESSING`
+- `HTML_CLEANING_STRICT`
+- `EPUB_SKIP_FRONT_MATTER`
+- `EPUB_REMOVE_REPEATED_CHROME`
+- `EPUB_FALLBACK_SCAN_ENABLED`
+- `INDEX_SCHEMA_VERSION`
+- `PROCESSOR_VERSION`
+- `NORMALIZATION_VERSION`
+- `EXTRACTION_STRATEGY_VERSION`

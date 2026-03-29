@@ -8,14 +8,16 @@
 
 Local, containerized Retrieval-Augmented Generation (RAG) for indexing your own files and chatting with grounded, citation-ready answers.
 
-## Step 1 Scope
+## Step 2 Scope
 
-This repository now includes the first end-to-end PRD implementation:
+This repository now includes the Step 2 PRD implementation:
 
-- polling embedder for `.md` and `.txt` files
+- processor-based ingestion for `.md`, `.txt`, `.html`, `.htm`, `.pdf`, and `.epub`
+- file-type-aware normalization, quality validation, metadata enrichment, and reindex triggers
+- PDF OCR fallback support in the embedder runtime
 - Qdrant vector storage
 - PostgreSQL persistence for file state, chunks, chat history, and retrieval logs
-- CLI retriever with configurable score threshold and result limits
+- CLI retriever with configurable score threshold, result limits, and printed source metadata
 - prompt layering from the `prompts/` directory
 
 Detailed setup and architecture notes live in [docs/setup.md](/Users/rknstlr/Workspace/ai-python/docs/setup.md) and [docs/architecture.md](/Users/rknstlr/Workspace/ai-python/docs/architecture.md).

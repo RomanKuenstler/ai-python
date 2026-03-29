@@ -8,3 +8,13 @@
 - Implemented CLI retrieval flow with prompt assembly, chat history persistence, retrieval score filtering, and retrieval evidence logging.
 - Added Dockerfiles, Compose service wiring, `.env.example`, and starter `data/tags.json`.
 - Added Step 1 documentation for architecture, embedder behavior, retriever behavior, database schema, and setup.
+
+## 2026-03-29 01:00 UTC
+
+- Reworked the embedder into a processor-based pipeline for `.txt`, `.md`, `.html`, `.htm`, `.pdf`, and `.epub`.
+- Added shared normalization, extraction quality validation, richer semantic chunk metadata, and reindex triggers tied to processing configuration.
+- Added PDF page-aware extraction, OCR fallback configuration, EPUB spine-order parsing, HTML cleanup, and repeated chrome reduction.
+- Extended PostgreSQL and Qdrant metadata payloads for Step 2 source transparency and indexing provenance.
+- Updated the retriever CLI to print source metadata below each answer and expanded retrieval logging accordingly.
+- Added Step 2 docs for parsers, OCR, metadata, testing, and refreshed the existing setup, architecture, embedder, retriever, and database docs.
+- Added focused pytest coverage and smoke-test guidance for the Step 2 ingestion and source-formatting paths.

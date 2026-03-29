@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import unicodedata
 from pathlib import Path
 
 
@@ -14,8 +15,15 @@ def compute_sha256(file_path: Path) -> str:
     return digest.hexdigest()
 
 
+def compute_text_sha256(text: str) -> str:
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
 def normalize_text(text: str) -> str:
-    normalized = text.replace("\r\n", "\n").replace("\r", "\n")
+    normalized = unicodedata.normalize("NFKC", text)
+    normalized = normalized.replace("\u00a0", " ")
+    normalized = normalized.replace("\r\n", "\n").replace("\r", "\n")
+    normalized = re.sub(r"[ \t\f\v]+$", "", normalized, flags=re.MULTILINE)
     normalized = re.sub(r"[^\S\n]+", " ", normalized)
     normalized = re.sub(r"\n{3,}", "\n\n", normalized)
     normalized = "".join(ch for ch in normalized if ch.isprintable() or ch in "\n\t")

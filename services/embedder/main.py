@@ -35,8 +35,14 @@ def main() -> None:
         postgres_client=postgres_client,
         qdrant_client=EmbedderQdrantClient(settings.qdrant_url, settings.qdrant_collection),
         tags_map=load_tags(data_dir / "tags.json"),
+        settings=settings,
     )
-    watcher = PollingWatcher(data_dir=data_dir, interval_seconds=settings.watch_interval, processor=processor)
+    watcher = PollingWatcher(
+        data_dir=data_dir,
+        interval_seconds=settings.watch_interval,
+        processor=processor,
+        settings=settings,
+    )
     watcher.sync_once()
     watcher.run()
 

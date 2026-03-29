@@ -14,6 +14,7 @@ from services.retriever.postgres_client import RetrieverPostgresClient
 from services.retriever.prompt_builder import PromptBuilder
 from services.retriever.qdrant_client import RetrieverQdrantClient
 from services.retriever.retriever import RetrievalService
+from services.retriever.source_formatter import format_sources
 
 
 def main() -> None:
@@ -68,6 +69,8 @@ def main() -> None:
             used_chunks=retrieved_chunks,
         )
         print(f"AI: {response}")
+        print()
+        print(format_sources(retrieved_chunks))
 
 
 if __name__ == "__main__":

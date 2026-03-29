@@ -3,11 +3,13 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
+from services.common.config import Settings
 from services.embedder.chunking import Chunker
 from services.embedder.embedding import EmbeddingClient
 from services.embedder.postgres_client import EmbedderPostgresClient
+from services.embedder.processors.processor_registry import ProcessorRegistry
 from services.embedder.qdrant_client import EmbedderQdrantClient
-from services.embedder.utils import compute_sha256, normalize_text
+from services.embedder.utils import compute_sha256
 
 LOGGER = logging.getLogger(__name__)
 
@@ -22,6 +24,7 @@ class FileProcessor:
         postgres_client: EmbedderPostgresClient,
         qdrant_client: EmbedderQdrantClient,
         tags_map: dict[str, list[str]],
+        settings: Settings,
     ) -> None:
         self.data_dir = data_dir
         self.chunker = chunker
@@ -29,15 +32,30 @@ class FileProcessor:
         self.postgres_client = postgres_client
         self.qdrant_client = qdrant_client
         self.tags_map = tags_map
+        self.settings = settings
+        self.registry = ProcessorRegistry(settings=settings, data_dir=data_dir)
 
     def process(self, file_path: Path) -> None:
         file_hash = compute_sha256(file_path)
         relative_path = str(file_path.relative_to(self.data_dir))
-        normalized = normalize_text(file_path.read_text(encoding="utf-8", errors="ignore"))
-        chunks = self.chunker.split(file_path, normalized)
         resolved_tags = self.resolve_tags(relative_path, file_path.name)
-        tagged_chunks = [{"chunk_id": f"{relative_path}:{index}", "text": chunk, "tags": resolved_tags} for index, chunk in enumerate(chunks)]
+        processor = self.registry.for_path(file_path)
+        extraction = processor.process(file_path=file_path, relative_path=relative_path, tags=resolved_tags)
+        chunk_payloads = self.chunker.split(extraction, relative_path) if extraction.text.strip() else []
+        tagged_chunks = [{**chunk, "tags": resolved_tags} for chunk in chunk_payloads]
         embeddings = self.embedding_client.embed_documents([chunk["text"] for chunk in tagged_chunks]) if tagged_chunks else []
+        LOGGER.info(
+            "Processed extraction",
+            extra={
+                "file_path": relative_path,
+                "processor": processor.processor_name,
+                "extraction_method": extraction.metadata.get("extraction_method"),
+                "ocr_used": extraction.processing_flags.get("ocr_used", False),
+                "quality_flags": extraction.quality.flags,
+                "semantic_blocks": len(extraction.semantic_blocks),
+                "chunks": len(tagged_chunks),
+            },
+        )
 
         if tagged_chunks:
             self.qdrant_client.sync_file(
@@ -51,10 +69,30 @@ class FileProcessor:
         else:
             self.qdrant_client.delete_file(relative_path)
         self.postgres_client.upsert_file_with_chunks(
-            file_path=relative_path,
-            file_name=file_path.name,
-            file_hash=file_hash,
-            tags=resolved_tags,
+            file_payload={
+                "file_path": relative_path,
+                "file_name": file_path.name,
+                "file_hash": file_hash,
+                "content_hash": extraction.metadata.get("content_hash", ""),
+                "file_type": extraction.metadata.get("extension", "").lstrip(".") or "unknown",
+                "processing_status": extraction.processing_flags.get("processing_status", "processed"),
+                "processing_error": extraction.processing_flags.get("processing_error"),
+                "last_extraction_method": extraction.metadata.get("extraction_method"),
+                "document_title": extraction.document_title,
+                "author": extraction.metadata.get("author"),
+                "detected_language": extraction.metadata.get("detected_language"),
+                "index_schema_version": self.settings.index_schema_version,
+                "processor_version": self.settings.processor_version,
+                "normalization_version": self.settings.normalization_version,
+                "extraction_strategy_version": self.settings.extraction_strategy_version,
+                "chunk_size": self.settings.chunk_size,
+                "chunk_overlap": self.settings.chunk_overlap,
+                "processing_signature": self.settings.processing_signature,
+                "extraction_quality": extraction.quality.to_metadata(),
+                "processing_flags": extraction.processing_flags,
+                "ocr_used": bool(extraction.processing_flags.get("ocr_used", False)),
+                "tags": resolved_tags,
+            },
             chunks=tagged_chunks,
         )
         LOGGER.info("Processed file", extra={"file_path": relative_path, "chunks": len(tagged_chunks)})

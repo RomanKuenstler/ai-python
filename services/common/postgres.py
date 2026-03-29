@@ -42,35 +42,25 @@ class PostgresClient:
     def upsert_file_with_chunks(
         self,
         *,
-        file_path: str,
-        file_name: str,
-        file_hash: str,
-        tags: list[str],
-        chunks: list[dict[str, str | list[str]]],
+        file_payload: dict,
+        chunks: list[dict],
     ) -> FileRecord:
+        file_path = str(file_payload["file_path"])
         with self.session() as session:
             record = session.scalar(select(FileRecord).where(FileRecord.file_path == file_path))
             if record is None:
-                record = FileRecord(file_path=file_path, file_name=file_name, file_hash=file_hash, tags=tags)
+                record = FileRecord(**file_payload)
                 session.add(record)
                 session.flush()
             else:
-                record.file_name = file_name
-                record.file_hash = file_hash
-                record.tags = tags
+                for key, value in file_payload.items():
+                    setattr(record, key, value)
                 record.last_processed_at = datetime.now(timezone.utc)
                 session.execute(delete(ChunkRecord).where(ChunkRecord.file_id == record.id))
                 session.flush()
 
             for chunk in chunks:
-                session.add(
-                    ChunkRecord(
-                        file_id=record.id,
-                        chunk_id=str(chunk["chunk_id"]),
-                        text=str(chunk["text"]),
-                        tags=list(chunk["tags"]),
-                    )
-                )
+                session.add(ChunkRecord(file_id=record.id, **chunk))
 
             session.flush()
             session.refresh(record)
@@ -121,6 +111,11 @@ class PostgresClient:
                         source_file_path=str(chunk["file_path"]),
                         chunk_id=str(chunk["chunk_id"]),
                         chunk_text=str(chunk["text"]),
+                        chunk_title=str(chunk.get("title") or "") or None,
+                        chapter=str(chunk.get("chapter") or "") or None,
+                        section=str(chunk.get("section") or "") or None,
+                        page_number=chunk.get("page_number"),
+                        tags=list(chunk.get("tags", [])),
                         retrieval_score=float(chunk["score"]),
                     )
                 )
