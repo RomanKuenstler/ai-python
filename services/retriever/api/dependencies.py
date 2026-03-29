@@ -16,6 +16,7 @@ def get_retriever_service() -> RetrieverAppService:
         embedding_model=settings.embedding_model,
         embedding_base_url=settings.embedding_base_url,
         embedding_api_key=settings.embedding_api_key,
+        embedding_max_input_tokens=settings.embedding_max_input_tokens,
         qdrant_url=settings.qdrant_url,
         qdrant_collection=settings.qdrant_collection,
         retrieval_score_threshold=settings.retrieval_score_threshold,

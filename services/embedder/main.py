@@ -31,6 +31,7 @@ def main() -> None:
             model=settings.embedding_model,
             base_url=settings.embedding_base_url,
             api_key=settings.embedding_api_key,
+            max_input_tokens=settings.embedding_max_input_tokens,
         ),
         postgres_client=postgres_client,
         qdrant_client=EmbedderQdrantClient(settings.qdrant_url, settings.qdrant_collection),

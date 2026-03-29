@@ -42,12 +42,18 @@ class PollingWatcher:
             if needs_reindex:
                 reason = "new" if tracked is None else "content_or_settings_changed"
                 LOGGER.info("Detected file change", extra={"file_path": relative_path, "reindex_reason": reason})
-                self.processor.process(absolute_path)
+                try:
+                    self.processor.process(absolute_path)
+                except Exception:
+                    LOGGER.exception("Failed to process file", extra={"file_path": relative_path})
 
         deleted_files = set(tracked_files) - set(disk_files)
         for relative_path in deleted_files:
             LOGGER.info("Detected file deletion", extra={"file_path": relative_path})
-            self.processor.delete(relative_path)
+            try:
+                self.processor.delete(relative_path)
+            except Exception:
+                LOGGER.exception("Failed to delete file state", extra={"file_path": relative_path})
 
     def _settings_changed(self, tracked) -> bool:
         return any(

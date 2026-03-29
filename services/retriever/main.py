@@ -34,6 +34,7 @@ def main() -> None:
             model=settings.embedding_model,
             base_url=settings.embedding_base_url,
             api_key=settings.embedding_api_key,
+            max_input_tokens=settings.embedding_max_input_tokens,
         ),
         qdrant_store=RetrieverQdrantClient(settings.qdrant_url, settings.qdrant_collection),
         score_threshold=settings.retrieval_score_threshold,

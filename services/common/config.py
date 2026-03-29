@@ -31,6 +31,7 @@ class Settings:
     embedding_model: str = os.getenv("EMBEDDING_MODEL", "text-embedding-004")
     embedding_base_url: str = os.getenv("EMBEDDING_BASE_URL", "http://host.docker.internal:11434/v1")
     embedding_api_key: str = os.getenv("EMBEDDING_API_KEY", "dummy")
+    embedding_max_input_tokens: int = _get_int("EMBEDDING_MAX_INPUT_TOKENS", 400)
     llm_model: str = os.getenv("LLM_MODEL", "qwen3.5-4b")
     llm_base_url: str = os.getenv("LLM_BASE_URL", "http://host.docker.internal:11434/v1")
     llm_api_key: str = os.getenv("LLM_API_KEY", "dummy")

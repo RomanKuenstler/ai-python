@@ -22,13 +22,65 @@ class PostgresClient:
 
     def _ensure_legacy_columns(self) -> None:
         inspector = inspect(self.engine)
-        if "chat_messages" not in inspector.get_table_names():
+        table_names = set(inspector.get_table_names())
+        if not table_names:
             return
 
-        columns = {column["name"] for column in inspector.get_columns("chat_messages")}
-        if "status" not in columns:
-            with self.engine.begin() as connection:
-                connection.execute(text("ALTER TABLE chat_messages ADD COLUMN status VARCHAR(32) DEFAULT 'completed'"))
+        column_specs: dict[str, dict[str, str]] = {
+            "files": {
+                "content_hash": "VARCHAR(64) DEFAULT ''",
+                "file_type": "VARCHAR(32) DEFAULT 'unknown'",
+                "processing_status": "VARCHAR(64) DEFAULT 'processed'",
+                "processing_error": "TEXT",
+                "last_extraction_method": "VARCHAR(64)",
+                "document_title": "VARCHAR(1024)",
+                "author": "VARCHAR(512)",
+                "detected_language": "VARCHAR(64)",
+                "index_schema_version": "INTEGER DEFAULT 1",
+                "processor_version": "INTEGER DEFAULT 1",
+                "normalization_version": "INTEGER DEFAULT 1",
+                "extraction_strategy_version": "INTEGER DEFAULT 1",
+                "chunk_size": "INTEGER DEFAULT 600",
+                "chunk_overlap": "INTEGER DEFAULT 100",
+                "processing_signature": "VARCHAR(2048) DEFAULT ''",
+                "extraction_quality": "JSON",
+                "processing_flags": "JSON",
+                "ocr_used": "BOOLEAN DEFAULT FALSE",
+            },
+            "chunks": {
+                "title": "VARCHAR(1024)",
+                "chapter": "VARCHAR(1024)",
+                "section": "VARCHAR(1024)",
+                "heading_path": "JSON",
+                "page_number": "INTEGER",
+                "extraction_method": "VARCHAR(64)",
+                "content_type": "VARCHAR(64)",
+                "quality_flags": "JSON",
+                "metadata": "JSON",
+            },
+            "chat_messages": {
+                "status": "VARCHAR(32) DEFAULT 'completed'",
+            },
+            "retrieval_logs": {
+                "chunk_title": "VARCHAR(1024)",
+                "chapter": "VARCHAR(1024)",
+                "section": "VARCHAR(1024)",
+                "page_number": "INTEGER",
+                "tags": "JSON",
+            },
+        }
+
+        with self.engine.begin() as connection:
+            for table_name, specs in column_specs.items():
+                if table_name not in table_names:
+                    continue
+                existing_columns = {column["name"] for column in inspector.get_columns(table_name)}
+                for column_name, ddl in specs.items():
+                    if column_name in existing_columns:
+                        continue
+                    connection.execute(text(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {ddl}"))
+
+            if "chat_messages" in table_names:
                 connection.execute(text("UPDATE chat_messages SET status = 'completed' WHERE status IS NULL"))
 
     @contextmanager
