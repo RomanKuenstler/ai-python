@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from uuid import NAMESPACE_URL, uuid5
 
 from qdrant_client.http import models
 
@@ -36,7 +37,7 @@ class EmbedderQdrantClient:
             }
             points.append(
                 models.PointStruct(
-                    id=chunk["chunk_id"],
+                    id=str(uuid5(NAMESPACE_URL, str(chunk["chunk_id"]))),
                     vector=vector,
                     payload=payload,
                 )

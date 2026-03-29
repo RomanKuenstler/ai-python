@@ -10,4 +10,4 @@ RUN pip install --no-cache-dir -r /tmp/requirements.txt
 
 COPY . /app
 
-CMD ["python", "services/retriever/main.py"]
+CMD ["python", "-m", "services.retriever.main"]

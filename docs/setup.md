@@ -6,7 +6,7 @@
 - A local OpenAI-compatible chat model endpoint
 - A local OpenAI-compatible embedding endpoint
 
-The repository defaults point to `http://host.docker.internal:11434/v1`. If your local model runner uses a different endpoint, update `.env`.
+The repository defaults point to Docker Model Runner on `http://host.docker.internal:12434/v1`. If your local model runner uses a different endpoint, update `.env`.
 
 ## Run
 
