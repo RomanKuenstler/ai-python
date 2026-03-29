@@ -39,9 +39,12 @@ postgres	Persistent storage (metadata, hashes, chat history, retrieval logs)
 3. Project Structure
 
 .
-├── docker-compose.yml
-├── prd.md
+├── compose.yml
+├── README.md
 ├── changelog.md
+├── prd
+│   ├── prd_v1.md
+│   ├── ...
 ├── docs/
 │   ├── architecture.md
 │   ├── embedder.md
@@ -524,3 +527,4 @@ Codex MAY optionally include:
 	•	Logging levels (INFO/DEBUG)
 	•	CLI flags (e.g., --reset-db)
 	•	Health checks for services
+	•   Use git commits 
