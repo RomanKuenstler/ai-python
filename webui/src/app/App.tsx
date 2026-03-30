@@ -83,6 +83,7 @@ function AppRoutes() {
                 error={app.appError}
                 messages={app.activeMessages}
                 sending={app.sending}
+                attachmentRules={app.attachmentRules}
                 onOpenChat={(chatId) => void app.ensureChatLoaded(chatId)}
                 onSend={app.sendMessage}
               />
@@ -100,11 +101,12 @@ type ChatRouteProps = {
   loading: boolean;
   sending: boolean;
   error: string | null;
+  attachmentRules: ReturnType<typeof useChatApp>["attachmentRules"];
   onOpenChat: (chatId: string) => void;
-  onSend: (value: string) => Promise<void>;
+  onSend: (value: string, attachments: File[]) => Promise<void>;
 };
 
-function ChatRoute({ messages, loading, sending, error, onOpenChat, onSend }: ChatRouteProps) {
+function ChatRoute({ messages, loading, sending, error, attachmentRules, onOpenChat, onSend }: ChatRouteProps) {
   const { chatId } = useParams();
 
   useEffect(() => {
@@ -113,7 +115,16 @@ function ChatRoute({ messages, loading, sending, error, onOpenChat, onSend }: Ch
     }
   }, [chatId, onOpenChat]);
 
-  return <ChatView messages={messages} sending={sending} loadingMessages={loading} error={error} onSend={onSend} />;
+  return (
+    <ChatView
+      messages={messages}
+      sending={sending}
+      loadingMessages={loading}
+      error={error}
+      attachmentRules={attachmentRules}
+      onSend={onSend}
+    />
+  );
 }
 
 export function App() {

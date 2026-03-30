@@ -48,113 +48,115 @@ export function LibraryPage({
   const busySet = useMemo(() => new Set(busyFileIds), [busyFileIds]);
 
   return (
-    <section className="library-page">
-      <div className="chat-header">
+    <section className="chat-column library-column">
+      <div className="page-heading">
         <div>
-          <p className="eyebrow">Managed knowledge base</p>
-          <h2>Library</h2>
+          <p className="section-label">Managed knowledge base</p>
+          <h2 className="page-title">Library</h2>
         </div>
         {error ? <p className="chat-error">{error}</p> : null}
       </div>
 
-      <div className="library-summary-grid">
-        <div className="summary-card">
+      <div className="library-summary-table">
+        <div className="library-summary-head">
           <span>Total files</span>
-          <strong>{library?.summary.total_files ?? 0}</strong>
-        </div>
-        <div className="summary-card">
           <span>Embedded files</span>
-          <strong>{library?.summary.embedded_files ?? 0}</strong>
-        </div>
-        <div className="summary-card">
           <span>Total chunks</span>
+        </div>
+        <div className="library-summary-row">
+          <strong>{library?.summary.total_files ?? 0}</strong>
+          <strong>{library?.summary.embedded_files ?? 0}</strong>
           <strong>{library?.summary.total_chunks ?? 0}</strong>
         </div>
       </div>
 
-      <div className="library-table-shell">
-        {loading ? <div className="empty-state">Loading library...</div> : null}
-        {!loading && library && library.files.length === 0 ? (
-          <div className="empty-state">
-            <div>
-              <p>No files are embedded yet.</p>
-              <p>Upload supported knowledge files to start grounding answers.</p>
+      <div className="library-table-card">
+        <div className="library-table-header">
+          <button className="primary-button" type="button" onClick={() => setUploadOpen(true)}>
+            Upload files
+          </button>
+          <button className="secondary-button" type="button" disabled>
+            Bulk actions
+          </button>
+        </div>
+        <div className="library-table-shell">
+          {loading ? <div className="empty-state">Loading library...</div> : null}
+          {!loading && library && library.files.length === 0 ? (
+            <div className="empty-state">
+              <div>
+                <p>No files are embedded yet.</p>
+                <p>Upload supported knowledge files to start grounding answers.</p>
+              </div>
             </div>
-          </div>
-        ) : null}
-        {!loading && library && library.files.length > 0 ? (
-          <div className="table-scroll">
-            <table className="library-table">
-              <thead>
-                <tr>
-                  <th>Name</th>
-                  <th>Status</th>
-                  <th>Tags</th>
-                  <th>Size</th>
-                  <th>Chunks</th>
-                  <th>Extension</th>
-                  <th>Embedded</th>
-                  <th>Updated</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {library.files.map((file) => (
-                  <tr key={file.id}>
-                    <td>{file.file_name}</td>
-                    <td>
-                      <span className={`status-pill ${file.is_enabled ? "enabled" : "disabled"}`}>
-                        {file.is_enabled ? "Active" : "Disabled"}
-                      </span>
-                    </td>
-                    <td>
-                      <div className="tag-list">
-                        {file.tags.map((tag) => (
-                          <span key={tag} className="tag-pill">
-                            {tag}
-                          </span>
-                        ))}
-                      </div>
-                    </td>
-                    <td>{formatBytes(file.size_bytes)}</td>
-                    <td>{file.chunk_count}</td>
-                    <td>
-                      <span className={`extension-badge ${file.extension.replace(".", "")}`}>{file.extension || file.file_type}</span>
-                    </td>
-                    <td>{file.is_embedded ? "Yes" : "No"}</td>
-                    <td>{new Date(file.updated_at).toLocaleString()}</td>
-                    <td>
-                      <div className="row-actions">
-                        <button
-                          className="secondary-button"
-                          type="button"
-                          disabled={busySet.has(file.id)}
-                          onClick={() => onToggleFile(file)}
-                        >
-                          {file.is_enabled ? "Disable" : "Enable"}
-                        </button>
-                        <button
-                          className="danger-button"
-                          type="button"
-                          disabled={busySet.has(file.id)}
-                          onClick={() => setDeleteTarget(file)}
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    </td>
+          ) : null}
+          {!loading && library && library.files.length > 0 ? (
+            <div className="table-scroll">
+              <table className="library-table">
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th>Status</th>
+                    <th>Tags</th>
+                    <th>Size</th>
+                    <th>Chunks</th>
+                    <th>Extension</th>
+                    <th>Embedded</th>
+                    <th>Updated</th>
+                    <th>Actions</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : null}
-      </div>
-
-      <div className="library-footer">
-        <button className="primary-button" type="button" onClick={() => setUploadOpen(true)}>
-          Upload
-        </button>
+                </thead>
+                <tbody>
+                  {library.files.map((file) => (
+                    <tr key={file.id}>
+                      <td>{file.file_name}</td>
+                      <td>
+                        <span className={`status-pill ${file.is_enabled ? "enabled" : "disabled"}`}>
+                          {file.is_enabled ? "Active" : "Disabled"}
+                        </span>
+                      </td>
+                      <td>
+                        <div className="tag-list">
+                          {file.tags.map((tag) => (
+                            <span key={tag} className="tag-pill">
+                              {tag}
+                            </span>
+                          ))}
+                        </div>
+                      </td>
+                      <td>{formatBytes(file.size_bytes)}</td>
+                      <td>{file.chunk_count}</td>
+                      <td>
+                        <span className={`extension-badge ${file.extension.replace(".", "")}`}>{file.extension || file.file_type}</span>
+                      </td>
+                      <td>{file.is_embedded ? "Yes" : "No"}</td>
+                      <td>{new Date(file.updated_at).toLocaleString()}</td>
+                      <td>
+                        <div className="row-actions">
+                          <button
+                            className="secondary-button"
+                            type="button"
+                            disabled={busySet.has(file.id)}
+                            onClick={() => onToggleFile(file)}
+                          >
+                            {file.is_enabled ? "Disable" : "Enable"}
+                          </button>
+                          <button
+                            className="danger-button"
+                            type="button"
+                            disabled={busySet.has(file.id)}
+                            onClick={() => setDeleteTarget(file)}
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : null}
+        </div>
       </div>
 
       {uploadOpen && library ? (

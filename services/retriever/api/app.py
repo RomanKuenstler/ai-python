@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from fastapi import Depends, FastAPI, File, Form, HTTPException, UploadFile
+import json
+
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 
 from services.common.config import get_settings
@@ -87,12 +89,28 @@ def create_app() -> FastAPI:
         response_model=MessageCreateResponse,
         responses={404: {"model": ErrorResponse}, 422: {"model": ErrorResponse}},
     )
-    def create_message(
+    async def create_message(
         chat_id: str,
-        payload: MessageCreateRequest,
+        request: Request,
+        message: str | None = Form(default=None),
+        files: list[UploadFile] | None = File(default=None),
         service: RetrieverAppService = Depends(get_retriever_service),
     ) -> MessageCreateResponse:
-        result = service.send_message(chat_id, payload.content.strip())
+        content_type = request.headers.get("content-type", "")
+        payload_message = message
+        attachments = files or []
+        if "application/json" in content_type:
+            payload = MessageCreateRequest(**(await request.json()))
+            payload_message = payload.message
+
+        if not payload_message or not payload_message.strip():
+            raise HTTPException(status_code=422, detail="Message cannot be empty")
+
+        try:
+            uploads = [(upload.filename or "attachment.bin", await upload.read()) for upload in attachments]
+            result = service.send_message(chat_id, payload_message.strip(), uploads)
+        except ValueError as error:
+            raise HTTPException(status_code=422, detail=str(error)) from error
         if result is None:
             raise HTTPException(status_code=404, detail="Chat not found")
         return MessageCreateResponse(**result)

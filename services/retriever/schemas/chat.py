@@ -38,12 +38,21 @@ class MessageRead(BaseModel):
     role: str
     content: str
     status: str
+    has_attachments: bool = False
     created_at: datetime
     sources: list[SourceRead] = Field(default_factory=list)
+    attachments: list["AttachmentRead"] = Field(default_factory=list)
 
 
 class MessageCreateRequest(BaseModel):
-    content: str = Field(min_length=1)
+    message: str = Field(min_length=1)
+
+
+class AttachmentRead(BaseModel):
+    file_name: str
+    file_type: str
+    extraction_method: str | None = None
+    quality: dict = Field(default_factory=dict)
 
 
 class MessageCreateResponse(BaseModel):
@@ -51,6 +60,7 @@ class MessageCreateResponse(BaseModel):
     user_message: MessageRead
     assistant_message: MessageRead
     sources: list[SourceRead] = Field(default_factory=list)
+    attachments_used: list[AttachmentRead] = Field(default_factory=list)
 
 
 class LibraryFileRead(BaseModel):

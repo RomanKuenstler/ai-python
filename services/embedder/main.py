@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import threading
 from pathlib import Path
 
 from dotenv import load_dotenv
+import uvicorn
 
 from services.common.config import get_settings
 from services.common.logging import configure_logging
@@ -45,7 +47,13 @@ def main() -> None:
         settings=settings,
     )
     watcher.sync_once()
-    watcher.run()
+    threading.Thread(target=watcher.run, daemon=True).start()
+    uvicorn.run(
+        "services.embedder.api.app:create_app",
+        host=settings.embedder_api_host,
+        port=settings.embedder_api_port,
+        factory=True,
+    )
 
 
 if __name__ == "__main__":

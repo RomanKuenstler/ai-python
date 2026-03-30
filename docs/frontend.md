@@ -7,74 +7,41 @@
 - Vite
 - `react-router-dom`
 - `react-markdown` with `remark-gfm`
-- `rehype-sanitize` for safe markdown rendering
+- `rehype-sanitize`
 
-## Layout
+## Step 5 UI Changes
 
-The Step 4 UI keeps a shared two-column shell:
+The UI now follows the Step 5 reference direction with:
 
-- left sidebar with branding, `New chat`, `Library`, chat list, and footer placeholder
-- right content area that switches between the chat page and the Library page
+- fixed top bar and fixed left navigation
+- white, low-chrome workspace styling
+- chat action menus for rename and delete
+- disabled placeholders for archive and personalization/settings-adjacent controls
+- attachment-capable composer with previews, removal, and validation
 
-## Major Components
+## Chat Experience
 
-- `AppShell` handles the shared layout
-- `Sidebar` renders chat navigation plus rename and delete dialogs
-- `LibraryPage` renders summary cards, the files table, and destructive actions
-- `UploadDialog` handles file selection and per-file tags
-- `ChatView`, `MessageList`, and `MessageBubble` render the conversation
-- `SourcesPanel` shows retrieval metadata below assistant answers
-- `ChatInput` handles message entry
+- optimistic user and assistant message placeholders
+- markdown rendering for assistant responses
+- per-message attachment chips for user messages
+- collapsible source panels for assistant replies
+- input disabled while a message is in flight
 
-## State Handling
+## Library Experience
 
-`useChatApp` now manages:
+- summary metrics row
+- file management table
+- upload dialog with extension-aware validation
+- enable/disable and delete actions
 
-- chats
-- active chat id
-- messages by chat
-- library file list and summary
-- upload state
-- per-file action busy state
-- app and library errors
+## Attachment UX
 
-The hook still persists the last active chat id in `localStorage` and still uses optimistic message placeholders while the message request is in flight.
-
-## Markdown Rendering
-
-Assistant messages are rendered as markdown rather than raw text.
-
-Supported markdown includes:
-
-- paragraphs
-- headings
-- bold and italic text
-- ordered and unordered lists
-- inline code
-- fenced code blocks
-- blockquotes
-- links
-- tables
-- horizontal rules
-
-### Safety
-
-- raw HTML is not enabled
-- output is sanitized with `rehype-sanitize`
-- the renderer avoids unsafe HTML injection paths by default
-
-### Styling
-
-- readable spacing between markdown blocks
-- dark surfaced code blocks
-- styled inline code
-- table borders
-- visible links
-- blockquote accents
+- max 3 files per message
+- supported extensions mirror backend config defaults
+- invalid files surface inline errors
+- attached files remain visible above the composer until send or removal
 
 ## Local Run
-
-Install and run from [webui/package.json](/Users/rknstlr/Workspace/ai-python/webui/package.json):
 
 ```bash
 cd webui
@@ -82,4 +49,4 @@ npm install
 npm run dev
 ```
 
-The frontend reads `VITE_API_BASE_URL` and defaults to `http://localhost:8000`.
+`VITE_API_BASE_URL` defaults to `http://localhost:8000`.

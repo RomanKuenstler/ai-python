@@ -5,9 +5,8 @@ from collections import Counter
 
 import fitz
 import pypdfium2 as pdfium
-import pytesseract
-from PIL import Image, ImageEnhance, ImageFilter, ImageOps
 
+from services.embedder.ocr import preprocess_image
 from services.embedder.processors.base_processor import BaseProcessor, ExtractionResult, SemanticBlock
 from services.embedder.processors.extraction_quality import evaluate_text_quality
 from services.embedder.processors.shared_normalization import normalize_block_text
@@ -147,7 +146,9 @@ class PdfProcessor(BaseProcessor):
             page = pdf[index]
             bitmap = page.render(scale=self.settings.pdf_render_scale)
             pil_image = bitmap.to_pil()
-            image = self._preprocess_image(pil_image)
+            image = preprocess_image(pil_image, self.settings)
+            import pytesseract
+
             text = normalize_block_text(pytesseract.image_to_string(image, lang=self.settings.ocr_language))
             if text:
                 blocks.append(
@@ -162,20 +163,6 @@ class PdfProcessor(BaseProcessor):
                     )
                 )
         return blocks
-
-    def _preprocess_image(self, image: Image.Image) -> Image.Image:
-        if not self.settings.ocr_enable_preprocessing:
-            return image
-        processed = image
-        if self.settings.ocr_preprocess_grayscale:
-            processed = ImageOps.grayscale(processed)
-        if self.settings.ocr_preprocess_contrast:
-            processed = ImageEnhance.Contrast(processed).enhance(1.5)
-        if self.settings.ocr_preprocess_threshold:
-            processed = processed.point(lambda pixel: 255 if pixel > 180 else 0)
-        if self.settings.ocr_preprocess_denoise:
-            processed = processed.filter(ImageFilter.MedianFilter(size=3))
-        return processed
 
     def _infer_title(self, blocks: list[SemanticBlock]) -> str | None:
         page_one = next((block for block in blocks if block.page_number == 1), None)

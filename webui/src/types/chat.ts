@@ -21,14 +21,23 @@ export type Source = {
   tags: string[];
 };
 
+export type AttachmentMeta = {
+  file_name: string;
+  file_type: string;
+  extraction_method: string | null;
+  quality: Record<string, unknown>;
+};
+
 export type Message = {
   id: string;
   chat_id: string;
   role: "user" | "assistant";
   content: string;
   status: "pending" | "completed" | "error" | string;
+  has_attachments: boolean;
   created_at: string;
   sources: Source[];
+  attachments: AttachmentMeta[];
   error?: string;
 };
 
@@ -37,6 +46,7 @@ export type MessageResponse = {
   user_message: Message;
   assistant_message: Message;
   sources: Source[];
+  attachments_used: AttachmentMeta[];
 };
 
 export type LibraryFile = {

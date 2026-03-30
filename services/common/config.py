@@ -44,6 +44,9 @@ class Settings:
     history_limit: int = _get_int("CHAT_HISTORY_LIMIT", _get_int("HISTORY_LIMIT", 5))
     api_host: str = os.getenv("API_HOST", "0.0.0.0")
     api_port: int = _get_int("API_PORT", 8000)
+    embedder_api_host: str = os.getenv("EMBEDDER_API_HOST", "0.0.0.0")
+    embedder_api_port: int = _get_int("EMBEDDER_API_PORT", 8001)
+    embedder_service_url: str = os.getenv("EMBEDDER_SERVICE_URL", "http://embedder:8001")
     cors_allowed_origins: str = os.getenv(
         "CORS_ALLOWED_ORIGINS",
         "http://localhost:5173,http://localhost:3000",
@@ -73,6 +76,13 @@ class Settings:
     max_upload_files: int = _get_int("MAX_UPLOAD_FILES", 5)
     allowed_upload_extensions: str = os.getenv("ALLOWED_UPLOAD_EXTENSIONS", ".txt,.md,.html,.htm,.pdf,.epub")
     upload_max_file_size_mb: int = _get_int("UPLOAD_MAX_FILE_SIZE_MB", 50)
+    attachment_max_files: int = _get_int("ATTACHMENT_MAX_FILES", 3)
+    attachment_max_total_chars: int = _get_int("ATTACHMENT_MAX_TOTAL_CHARS", 15000)
+    enable_attachment_ocr: bool = _get_bool("ENABLE_ATTACHMENT_OCR", True)
+    attachment_allowed_extensions: str = os.getenv(
+        "ATTACHMENT_ALLOWED_EXTENSIONS",
+        ".txt,.md,.html,.htm,.pdf,.epub,.csv,.png,.jpg,.jpeg,.webp",
+    )
     default_tag: str = os.getenv("DEFAULT_TAG", "default")
 
     @property
@@ -105,6 +115,14 @@ class Settings:
         return {
             extension.strip().lower()
             for extension in self.allowed_upload_extensions.split(",")
+            if extension.strip()
+        }
+
+    @property
+    def attachment_allowed_extension_set(self) -> set[str]:
+        return {
+            extension.strip().lower()
+            for extension in self.attachment_allowed_extensions.split(",")
             if extension.strip()
         }
 

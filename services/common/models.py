@@ -97,7 +97,24 @@ class ChatMessage(Base):
     role: Mapped[str] = mapped_column(String(32), nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="completed")
+    has_attachments: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+    attachments: Mapped[list["MessageAttachment"]] = relationship(back_populates="message", cascade="all, delete-orphan")
+
+
+class MessageAttachment(Base):
+    __tablename__ = "message_attachments"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    message_id: Mapped[int] = mapped_column(ForeignKey("chat_messages.id", ondelete="CASCADE"), nullable=False)
+    file_name: Mapped[str] = mapped_column(String(512), nullable=False)
+    file_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    extraction_method: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    quality: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+    message: Mapped[ChatMessage] = relationship(back_populates="attachments")
 
 
 class RetrievalLog(Base):

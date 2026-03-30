@@ -4,8 +4,10 @@ from pathlib import Path
 
 from services.common.config import Settings
 from services.embedder.processors.base_processor import BaseProcessor
+from services.embedder.processors.csv_processor import CsvProcessor
 from services.embedder.processors.epub_processor import EpubProcessor
 from services.embedder.processors.html_processor import HtmlProcessor
+from services.embedder.processors.image_processor import ImageProcessor
 from services.embedder.processors.markdown_processor import MarkdownProcessor
 from services.embedder.processors.pdf_processor import PdfProcessor
 from services.embedder.processors.txt_processor import TxtProcessor
@@ -21,6 +23,11 @@ class ProcessorRegistry:
             ".htm": HtmlProcessor(**shared),
             ".pdf": PdfProcessor(**shared),
             ".epub": EpubProcessor(**shared),
+            ".csv": CsvProcessor(**shared),
+            ".png": ImageProcessor(**shared),
+            ".jpg": ImageProcessor(**shared),
+            ".jpeg": ImageProcessor(**shared),
+            ".webp": ImageProcessor(**shared),
         }
 
     def for_path(self, file_path: Path) -> BaseProcessor:

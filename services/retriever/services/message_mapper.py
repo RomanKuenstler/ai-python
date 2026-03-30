@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from services.common.models import ChatMessage, ChatSession, FileRecord, RetrievalLog
-from services.retriever.schemas.chat import ChatRead, LibraryFileRead, MessageRead, SourceRead
+from services.common.models import ChatMessage, ChatSession, FileRecord, MessageAttachment, RetrievalLog
+from services.retriever.schemas.chat import AttachmentRead, ChatRead, LibraryFileRead, MessageRead, SourceRead
 
 
 def map_chat(chat: ChatSession) -> ChatRead:
@@ -27,6 +27,22 @@ def map_source(log: RetrievalLog) -> SourceRead:
     )
 
 
+def map_attachment(attachment: MessageAttachment | dict[str, object]) -> AttachmentRead:
+    if isinstance(attachment, MessageAttachment):
+        return AttachmentRead(
+            file_name=attachment.file_name,
+            file_type=attachment.file_type,
+            extraction_method=attachment.extraction_method,
+            quality=dict(attachment.quality or {}),
+        )
+    return AttachmentRead(
+        file_name=str(attachment["file_name"]),
+        file_type=str(attachment["type"]),
+        extraction_method=str(attachment.get("extraction_method") or "") or None,
+        quality=dict(attachment.get("quality") or {}),
+    )
+
+
 def map_message(message: ChatMessage, sources: list[RetrievalLog] | None = None) -> MessageRead:
     return MessageRead(
         id=str(message.id),
@@ -34,6 +50,7 @@ def map_message(message: ChatMessage, sources: list[RetrievalLog] | None = None)
         role=message.role,
         content=message.content,
         status=message.status,
+        has_attachments=message.has_attachments,
         created_at=message.created_at,
         sources=[map_source(log) for log in (sources or [])],
     )

@@ -37,3 +37,12 @@
 - Reworked the web UI into routed chat and library views with sidebar `Library` navigation, upload dialogs, file actions, and chat hover menus.
 - Added safe assistant markdown rendering with `react-markdown`, GitHub-flavored markdown support, and sanitization.
 - Added Step 4 API and backend tests, refreshed frontend build validation, and documented library, upload, chat-management, frontend, API, and testing behavior.
+
+## 2026-03-30 00:00 UTC
+
+- Implemented Step 5 attachment handling across the web UI, retriever API, prompt builder, and embedder service.
+- Added ephemeral attachment extraction for `.csv` plus OCR-backed image attachments without persisting file content or vectors.
+- Added message attachment metadata persistence and expanded message API payloads with `has_attachments`, `attachments`, and `attachments_used`.
+- Introduced Alembic migrations and switched database initialization to migration-driven schema upgrades.
+- Reworked the web UI toward the Step 5 reference structure with attachment previews and disabled placeholder controls for unimplemented areas.
+- Updated environment defaults, testing guidance, API/frontend docs, and repository ignore rules for a cleaner project root.

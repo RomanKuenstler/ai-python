@@ -51,32 +51,30 @@ export function Sidebar({
   }, []);
 
   return (
-    <div className="sidebar">
-      <div className="sidebar-header">
-        <div>
-          <p className="eyebrow">Local Knowledge</p>
-          <h1>Local RAG</h1>
-        </div>
-      </div>
-
-      <div className="sidebar-primary-actions">
-        <button className="new-chat-button" type="button" onClick={onCreateChat}>
+    <div className="side-nav-inner">
+      <div className="side-nav-top">
+        <button className="side-nav-item" type="button" onClick={onCreateChat}>
           New chat
         </button>
-        <button className={`library-button${activeView === "library" ? " active" : ""}`} type="button" onClick={onOpenLibrary}>
+        <button className={`side-nav-item${activeView === "library" ? " active" : ""}`} type="button" onClick={onOpenLibrary}>
           Library
+        </button>
+        <button className="side-nav-item is-disabled" type="button" disabled>
+          Archive chats
         </button>
       </div>
 
-      <div className="chat-list" aria-label="Chats">
+      <p className="side-nav-headline">Chats</p>
+
+      <div className="side-nav-chat-list" aria-label="Chats">
         {chats.map((chat) => (
-          <div key={chat.id} className={`chat-list-row${chat.id === activeChatId && activeView === "chat" ? " active" : ""}`}>
-            <button className="chat-list-item" type="button" onClick={() => onSelectChat(chat.id)}>
+          <div key={chat.id} className={`side-nav-chat-row${chat.id === activeChatId && activeView === "chat" ? " active" : ""}`}>
+            <button className={`side-nav-chat-item${chat.id === activeChatId && activeView === "chat" ? " active" : ""}`} type="button" onClick={() => onSelectChat(chat.id)}>
               <span>{chat.chat_name}</span>
             </button>
-            <div className="chat-menu-anchor" ref={menuChatId === chat.id ? menuRef : null}>
+            <div className="chat-item-actions" ref={menuChatId === chat.id ? menuRef : null}>
               <button
-                className="chat-menu-button"
+                className="chat-item-actions-trigger"
                 type="button"
                 aria-label={`Chat options for ${chat.chat_name}`}
                 onClick={(event) => {
@@ -87,8 +85,9 @@ export function Sidebar({
                 ...
               </button>
               {menuChatId === chat.id ? (
-                <div className="chat-item-menu">
+                <div className="chat-item-actions-menu">
                   <button
+                    className="chat-item-actions-option"
                     type="button"
                     onClick={() => {
                       setRenameTarget(chat);
@@ -100,7 +99,7 @@ export function Sidebar({
                   </button>
                   <button
                     type="button"
-                    className="danger-text"
+                    className="chat-item-actions-option delete"
                     onClick={() => {
                       setDeleteTarget(chat);
                       setMenuChatId(null);
@@ -115,8 +114,17 @@ export function Sidebar({
         ))}
       </div>
 
-      <div className="sidebar-footer">
-        <span>Future user menu</span>
+      <div className="side-nav-bottom">
+        <div className="side-nav-user">
+          <div className="side-nav-avatar-placeholder">LR</div>
+          <div className="side-nav-user-meta">
+            <strong>Local User</strong>
+            <small>Settings locked in Step 5</small>
+          </div>
+        </div>
+        <button className="side-nav-item is-disabled" type="button" disabled>
+          Personalization
+        </button>
       </div>
 
       {renameTarget ? (

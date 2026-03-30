@@ -28,6 +28,15 @@ export function MessageBubble({ message }: MessageBubbleProps) {
           message.content
         )}
       </div>
+      {message.attachments.length > 0 ? (
+        <div className="message-attachments">
+          {message.attachments.map((attachment) => (
+            <span key={`${message.id}-${attachment.file_name}`} className="message-attachment-pill">
+              {attachment.file_name}
+            </span>
+          ))}
+        </div>
+      ) : null}
       {message.role === "assistant" && message.sources.length > 0 ? (
         <div className="sources-wrap">
           <button className="sources-button" type="button" onClick={() => setSourcesOpen((current) => !current)}>

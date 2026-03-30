@@ -10,6 +10,7 @@ from services.embedder.postgres_client import EmbedderPostgresClient
 from services.embedder.processor import FileProcessor
 from services.embedder.qdrant_client import EmbedderQdrantClient
 from services.retriever.chat_history import ChatHistoryService
+from services.retriever.attachment_client import AttachmentProcessingClient
 from services.retriever.llm_client import LlmClient
 from services.retriever.prompt_builder import PromptBuilder
 from services.retriever.qdrant_client import RetrieverQdrantClient
@@ -17,7 +18,7 @@ from services.retriever.repositories.chat_repository import ChatRepository
 from services.retriever.retriever import RetrievalService
 from services.retriever.services.chat_naming import generate_chat_name
 from services.retriever.services.library_manager import LibraryManager, UploadFilePayload
-from services.retriever.services.message_mapper import map_chat, map_message, map_source
+from services.retriever.services.message_mapper import map_attachment, map_chat, map_message, map_source
 
 
 @dataclass(slots=True)
@@ -28,6 +29,8 @@ class RetrieverDependencies:
     prompt_builder: PromptBuilder
     llm_client: LlmClient
     library_manager: LibraryManager
+    attachment_client: AttachmentProcessingClient
+    settings: Settings
 
 
 class RetrieverAppService:
@@ -38,6 +41,8 @@ class RetrieverAppService:
         self.prompt_builder = deps.prompt_builder
         self.llm_client = deps.llm_client
         self.library_manager = deps.library_manager
+        self.attachment_client = deps.attachment_client
+        self.settings = deps.settings
 
     def create_chat(self):
         chat = self.chat_repository.create_chat(generate_chat_name())
@@ -55,8 +60,15 @@ class RetrieverAppService:
     def get_chat_messages(self, chat_id: str):
         messages = self.chat_repository.list_messages(chat_id)
         assistant_ids = [message.id for message in messages if message.role == "assistant"]
+        message_ids = [message.id for message in messages]
         sources_by_message = self.chat_repository.get_sources_by_assistant_message(assistant_ids)
-        return [map_message(message, sources_by_message.get(message.id)) for message in messages]
+        attachments_by_message = self.chat_repository.get_attachments_by_message_ids(message_ids)
+        return [
+            map_message(message, sources_by_message.get(message.id)).model_copy(
+                update={"attachments": [map_attachment(item) for item in attachments_by_message.get(message.id, [])]}
+            )
+            for message in messages
+        ]
 
     def rename_chat(self, chat_id: str, chat_name: str):
         normalized_name = chat_name.strip()
@@ -87,18 +99,28 @@ class RetrieverAppService:
         files = self.library_manager.upload_files(uploads, tags_by_file)
         return {"files": files}
 
-    def send_message(self, chat_id: str, user_content: str):
+    def send_message(self, chat_id: str, user_content: str, attachments: list[tuple[str, bytes]] | None = None):
         chat = self.chat_repository.get_chat(chat_id)
         if chat is None:
             return None
 
-        user_message = self.chat_repository.create_message(chat_id, "user", user_content)
+        processed_attachments = self._process_attachments(attachments or [])
+        user_message = self.chat_repository.create_message(
+            chat_id,
+            "user",
+            user_content,
+            has_attachments=bool(processed_attachments),
+        )
+        if processed_attachments:
+            self.chat_repository.add_message_attachments(user_message.id, processed_attachments)
         history = self.history_service.fetch(chat_id, exclude_message_id=user_message.id)
         retrieved_chunks = self.retrieval_service.retrieve(user_content)
         prompt_messages = self.prompt_builder.build_messages(
             user_message=user_content,
             history=history,
             retrieved_chunks=retrieved_chunks,
+            attachments=processed_attachments,
+            attachment_char_limit=self.settings.attachment_max_total_chars,
         )
         response = self.llm_client.invoke(prompt_messages)
         assistant_message = self.chat_repository.create_message(chat_id, "assistant", response)
@@ -111,10 +133,29 @@ class RetrieverAppService:
 
         return {
             "chat_id": chat_id,
-            "user_message": map_message(user_message),
+            "user_message": map_message(user_message).model_copy(
+                update={"attachments": [map_attachment(item) for item in processed_attachments]}
+            ),
             "assistant_message": map_message(assistant_message),
             "sources": [map_source_from_chunk(chunk) for chunk in retrieved_chunks],
+            "attachments_used": [map_attachment(item) for item in processed_attachments],
         }
+
+    def _process_attachments(self, attachments: list[tuple[str, bytes]]) -> list[dict[str, object]]:
+        if not attachments:
+            return []
+        if len(attachments) > self.settings.attachment_max_files:
+            raise ValueError(f"Maximum {self.settings.attachment_max_files} attachments are allowed per message")
+
+        validated: list[tuple[str, bytes]] = []
+        for file_name, content in attachments:
+            suffix = Path(file_name).suffix.lower()
+            if suffix not in self.settings.attachment_allowed_extension_set:
+                raise ValueError(f"Unsupported attachment type: {suffix or file_name}")
+            validated.append((file_name, content))
+
+        processed = self.attachment_client.process_files(validated)
+        return [attachment for attachment in processed if str(attachment.get("content") or "").strip()]
 
 
 def build_retriever_app_service(
@@ -177,6 +218,8 @@ def build_retriever_app_service(
         prompt_builder=PromptBuilder(prompts_dir),
         llm_client=LlmClient(model=llm_model, base_url=llm_base_url, api_key=llm_api_key),
         library_manager=LibraryManager(data_dir=data_dir, processor=library_processor, settings=settings),
+        attachment_client=AttachmentProcessingClient(settings.embedder_service_url),
+        settings=settings,
     )
     return RetrieverAppService(deps)
 

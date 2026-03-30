@@ -49,10 +49,20 @@ export const apiClient = {
   getMessages(chatId: string) {
     return request<Message[]>(`/api/chats/${chatId}/messages`);
   },
-  sendMessage(chatId: string, content: string) {
+  sendMessage(chatId: string, message: string, attachments: File[]) {
+    if (attachments.length === 0) {
+      return request<MessageResponse>(`/api/chats/${chatId}/messages`, {
+        method: "POST",
+        body: JSON.stringify({ message }),
+      });
+    }
+
+    const formData = new FormData();
+    formData.append("message", message);
+    attachments.forEach((file) => formData.append("files", file));
     return request<MessageResponse>(`/api/chats/${chatId}/messages`, {
       method: "POST",
-      body: JSON.stringify({ content }),
+      body: formData,
     });
   },
   listLibraryFiles() {

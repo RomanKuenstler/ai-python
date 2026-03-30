@@ -4,7 +4,15 @@ from fastapi.testclient import TestClient
 
 from services.retriever.api.app import create_app
 from services.retriever.api.dependencies import get_retriever_service
-from services.retriever.schemas.chat import ChatRead, LibraryFileRead, LibraryListResponse, LibrarySummaryRead, MessageRead, SourceRead
+from services.retriever.schemas.chat import (
+    AttachmentRead,
+    ChatRead,
+    LibraryFileRead,
+    LibraryListResponse,
+    LibrarySummaryRead,
+    MessageRead,
+    SourceRead,
+)
 
 
 class StubRetrieverService:
@@ -49,6 +57,7 @@ class StubRetrieverService:
                 role="assistant",
                 content="Grounded answer",
                 status="completed",
+                has_attachments=False,
                 created_at="2026-03-29T00:00:01Z",
                 sources=[
                     SourceRead(
@@ -63,12 +72,21 @@ class StubRetrieverService:
                         tags=["docker"],
                     )
                 ],
+                attachments=[],
             )
         ]
 
-    def send_message(self, chat_id: str, user_content: str):
+    def send_message(self, chat_id: str, user_content: str, attachments: list[tuple[str, bytes]] | None = None):
         if chat_id != "chat-1":
             return None
+        attachment_payload = [
+            AttachmentRead(
+                file_name="diagram.png",
+                file_type="png",
+                extraction_method="ocr",
+                quality={"score": 0.91},
+            )
+        ]
         return {
             "chat_id": "chat-1",
             "user_message": MessageRead(
@@ -77,8 +95,10 @@ class StubRetrieverService:
                 role="user",
                 content=user_content,
                 status="completed",
+                has_attachments=bool(attachments),
                 created_at="2026-03-29T00:00:00Z",
                 sources=[],
+                attachments=attachment_payload if attachments else [],
             ),
             "assistant_message": MessageRead(
                 id="2",
@@ -86,8 +106,10 @@ class StubRetrieverService:
                 role="assistant",
                 content="Grounded answer",
                 status="completed",
+                has_attachments=False,
                 created_at="2026-03-29T00:00:01Z",
                 sources=[],
+                attachments=[],
             ),
             "sources": [
                 SourceRead(
@@ -102,6 +124,7 @@ class StubRetrieverService:
                     tags=["docker"],
                 )
             ],
+            "attachments_used": attachment_payload if attachments else [],
         }
 
     def list_library_files(self) -> LibraryListResponse:
@@ -177,12 +200,25 @@ def test_chat_endpoints() -> None:
 
 def test_post_message_returns_sources() -> None:
     client = build_client()
-    response = client.post("/api/chats/chat-1/messages", json={"content": "hello"})
+    response = client.post("/api/chats/chat-1/messages", json={"message": "hello"})
     assert response.status_code == 200
     payload = response.json()
     assert payload["assistant_message"]["content"] == "Grounded answer"
     assert payload["sources"][0]["file_name"] == "manual.pdf"
     assert payload["sources"][0]["section"] == "Volumes"
+
+
+def test_post_message_supports_attachments() -> None:
+    client = build_client()
+    response = client.post(
+        "/api/chats/chat-1/messages",
+        data={"message": "Explain this image"},
+        files={"files": ("diagram.png", b"fake-bytes", "image/png")},
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["user_message"]["has_attachments"] is True
+    assert payload["attachments_used"][0]["file_name"] == "diagram.png"
 
 
 def test_missing_chat_returns_404() -> None:

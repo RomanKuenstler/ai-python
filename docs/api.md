@@ -1,28 +1,19 @@
 # API
 
-## Base URL
+## Base URLs
 
-The retriever API listens on `http://localhost:8000` by default.
+- Retriever API: `http://localhost:8000`
+- Internal embedder attachment API: `http://embedder:8001`
 
-## Core Endpoints
-
-### `GET /api/health`
-
-Returns:
-
-```json
-{
-  "status": "ok"
-}
-```
+## Chats
 
 ### `POST /api/chats`
 
-Creates a new chat with a generated placeholder name such as `chat-a1b2c3`.
+Creates a new chat with a generated placeholder name.
 
 ### `GET /api/chats`
 
-Returns all chats ordered by most recently updated first.
+Returns chats ordered by most recently updated first.
 
 ### `GET /api/chats/{chat_id}`
 
@@ -32,33 +23,36 @@ Returns one chat record or `404`.
 
 Renames a chat.
 
-Request body:
-
-```json
-{
-  "chat_name": "Docker Notes"
-}
-```
-
 ### `DELETE /api/chats/{chat_id}`
 
-Deletes the chat plus its stored messages and retrieval logs.
+Deletes the chat, messages, attachment metadata, and retrieval logs.
 
 ### `GET /api/chats/{chat_id}/messages`
 
-Returns the full message history for a chat. Assistant messages include persisted source metadata.
+Returns full chat history. Messages now include:
+
+- `has_attachments`
+- `attachments`
+- `sources`
 
 ### `POST /api/chats/{chat_id}/messages`
 
-Request body:
+Supports either JSON or multipart form data.
+
+JSON request:
 
 ```json
 {
-  "content": "What does the Docker book say about volumes?"
+  "message": "What does the Docker book say about volumes?"
 }
 ```
 
-Response body:
+Multipart request:
+
+- `message`: text field
+- `files`: up to 3 file parts
+
+Response:
 
 ```json
 {
@@ -67,146 +61,90 @@ Response body:
     "id": "1",
     "chat_id": "chat-id",
     "role": "user",
-    "content": "What does the Docker book say about volumes?",
+    "content": "Explain the attachment",
     "status": "completed",
-    "created_at": "2026-03-29T20:00:00Z",
-    "sources": []
+    "has_attachments": true,
+    "created_at": "2026-03-30T12:00:00Z",
+    "sources": [],
+    "attachments": [
+      {
+        "file_name": "diagram.png",
+        "file_type": "png",
+        "extraction_method": "ocr",
+        "quality": {
+          "score": 0.91
+        }
+      }
+    ]
   },
   "assistant_message": {
     "id": "2",
     "chat_id": "chat-id",
     "role": "assistant",
-    "content": "…",
+    "content": "...",
     "status": "completed",
-    "created_at": "2026-03-29T20:00:01Z",
-    "sources": []
+    "has_attachments": false,
+    "created_at": "2026-03-30T12:00:01Z",
+    "sources": [],
+    "attachments": []
   },
-  "sources": [
+  "sources": [],
+  "attachments_used": [
     {
-      "chunk_id": "manual-12",
-      "file_name": "Deployment with Docker.epub",
-      "file_path": "/app/data/Deployment with Docker.epub",
-      "title": "Storage",
-      "chapter": "Chapter 4",
-      "section": "Volumes",
-      "page_number": null,
-      "score": 0.742,
-      "tags": ["docker", "storage"]
+      "file_name": "diagram.png",
+      "file_type": "png",
+      "extraction_method": "ocr",
+      "quality": {
+        "score": 0.91
+      }
     }
   ]
 }
 ```
 
-## Library Endpoints
+## Library
 
 ### `GET /api/library/files`
 
-Returns all known library files plus upload constraints used by the UI.
-
-Example response:
-
-```json
-{
-  "files": [
-    {
-      "id": 1,
-      "file_name": "Deployment with Docker.epub",
-      "file_path": "Deployment with Docker.epub",
-      "file_type": "epub",
-      "extension": ".epub",
-      "size_bytes": 3560000,
-      "chunk_count": 1656,
-      "tags": ["container", "docker"],
-      "is_embedded": true,
-      "is_enabled": true,
-      "processing_status": "processed",
-      "updated_at": "2026-03-29T20:00:00Z"
-    }
-  ],
-  "summary": {
-    "total_files": 1,
-    "embedded_files": 1,
-    "total_chunks": 1656
-  },
-  "allowed_extensions": [".epub", ".html", ".htm", ".md", ".pdf", ".txt"],
-  "max_upload_files": 5,
-  "upload_max_file_size_mb": 50,
-  "default_tag": "default"
-}
-```
+Returns embedded library files and upload constraints.
 
 ### `POST /api/library/files/upload`
 
 Multipart upload endpoint used by the web UI.
 
-Contract:
-
-- one or more `files` parts
-- optional `tags_by_file` form field containing JSON
-
-Example `tags_by_file` payload:
-
-```json
-{
-  "notes.md": ["docker", "containers"],
-  "manual.pdf": ["default"]
-}
-```
-
 Rules:
 
-- maximum file count is controlled by `MAX_UPLOAD_FILES`
-- allowed extensions are controlled by `ALLOWED_UPLOAD_EXTENSIONS`
-- empty or missing tags are normalized to `DEFAULT_TAG`
-- duplicate filenames are rejected
-- existing library filenames are rejected
+- max file count comes from `MAX_UPLOAD_FILES`
+- allowed extensions come from `ALLOWED_UPLOAD_EXTENSIONS`
+- tags default to `DEFAULT_TAG`
+- duplicate names are rejected
 
 ### `PATCH /api/library/files/{file_id}`
 
-Updates persistent file state.
-
-Request body:
-
-```json
-{
-  "is_enabled": false
-}
-```
-
-`is_enabled=false` keeps the file in Postgres, Qdrant, and `data/`, but removes it from retrieval results.
+Toggles `is_enabled` without deleting vectors.
 
 ### `DELETE /api/library/files/{file_id}`
 
-Deletes the file from:
+Deletes the library file from local storage, PostgreSQL, Qdrant, and tag metadata.
 
-- local `data/`
-- PostgreSQL file and chunk metadata
-- Qdrant chunk vectors
-- `tags.json` if present
+## Internal Embedder Attachment Job
 
-## Error Responses
+### `POST /internal/process-attachments`
 
-The API returns structured JSON errors:
+Used only by the retriever service.
+
+Request payload:
 
 ```json
 {
-  "detail": "Chat not found"
+  "type": "attachment_processing",
+  "files": [
+    {
+      "file_name": "table.csv",
+      "content_base64": "..."
+    }
+  ]
 }
 ```
 
-## Local Usage
-
-```bash
-curl http://localhost:8000/api/health
-curl -X POST http://localhost:8000/api/chats
-curl -X PATCH http://localhost:8000/api/chats/<chat_id> \
-  -H "Content-Type: application/json" \
-  -d '{"chat_name":"Docker Notes"}'
-curl http://localhost:8000/api/library/files
-curl -X PATCH http://localhost:8000/api/library/files/1 \
-  -H "Content-Type: application/json" \
-  -d '{"is_enabled":false}'
-curl -X POST http://localhost:8000/api/library/files/upload \
-  -F 'files=@data/AI_IPS.md' \
-  -F 'tags_by_file={"AI_IPS.md":["security","default"]}'
-```
+This endpoint extracts text and returns ephemeral attachment metadata. It does not persist vectors or file content.

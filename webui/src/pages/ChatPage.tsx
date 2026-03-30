@@ -4,8 +4,19 @@ import { ChatView } from "../components/chat/ChatView";
 import { useChatApp } from "../hooks/useChatApp";
 
 export function ChatPage() {
-  const { chats, activeChatId, activeMessages, loadingMessages, sending, appError, createChat, ensureChatLoaded, renameChat, deleteChat } =
-    useChatApp();
+  const {
+    chats,
+    activeChatId,
+    activeMessages,
+    loadingMessages,
+    sending,
+    appError,
+    attachmentRules,
+    createChat,
+    ensureChatLoaded,
+    renameChat,
+    deleteChat,
+  } = useChatApp();
 
   return (
     <AppShell
@@ -21,7 +32,16 @@ export function ChatPage() {
           onDeleteChat={(chatId) => void deleteChat(chatId)}
         />
       }
-      content={<ChatView messages={activeMessages} sending={sending} loadingMessages={loadingMessages} error={appError} onSend={async () => undefined} />}
+      content={
+        <ChatView
+          messages={activeMessages}
+          sending={sending}
+          loadingMessages={loadingMessages}
+          error={appError}
+          attachmentRules={attachmentRules}
+          onSend={async () => undefined}
+        />
+      }
     />
   );
 }

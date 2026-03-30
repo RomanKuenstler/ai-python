@@ -8,7 +8,8 @@ from typing import Iterator
 from sqlalchemy import create_engine, delete, func, inspect, select, text
 from sqlalchemy.orm import Session, sessionmaker
 
-from services.common.models import Base, ChatMessage, ChatSession, ChunkRecord, FileRecord, RetrievalLog
+from services.common.migrations import run_migrations
+from services.common.models import ChatMessage, ChatSession, ChunkRecord, FileRecord, MessageAttachment, RetrievalLog
 from services.common.retry import retry
 
 
@@ -18,82 +19,7 @@ class PostgresClient:
         self.session_factory = sessionmaker(bind=self.engine, expire_on_commit=False)
 
     def initialize(self) -> None:
-        retry(lambda: Base.metadata.create_all(self.engine))
-        self._ensure_legacy_columns()
-
-    def _ensure_legacy_columns(self) -> None:
-        inspector = inspect(self.engine)
-        table_names = set(inspector.get_table_names())
-        if not table_names:
-            return
-
-        column_specs: dict[str, dict[str, str]] = {
-            "files": {
-                "extension": "VARCHAR(16) DEFAULT ''",
-                "size_bytes": "INTEGER DEFAULT 0",
-                "chunk_count": "INTEGER DEFAULT 0",
-                "content_hash": "VARCHAR(64) DEFAULT ''",
-                "file_type": "VARCHAR(32) DEFAULT 'unknown'",
-                "processing_status": "VARCHAR(64) DEFAULT 'processed'",
-                "is_embedded": "BOOLEAN DEFAULT FALSE",
-                "is_enabled": "BOOLEAN DEFAULT TRUE",
-                "processing_error": "TEXT",
-                "last_extraction_method": "VARCHAR(64)",
-                "document_title": "VARCHAR(1024)",
-                "author": "VARCHAR(512)",
-                "detected_language": "VARCHAR(64)",
-                "index_schema_version": "INTEGER DEFAULT 1",
-                "processor_version": "INTEGER DEFAULT 1",
-                "normalization_version": "INTEGER DEFAULT 1",
-                "extraction_strategy_version": "INTEGER DEFAULT 1",
-                "chunk_size": "INTEGER DEFAULT 600",
-                "chunk_overlap": "INTEGER DEFAULT 100",
-                "processing_signature": "VARCHAR(2048) DEFAULT ''",
-                "extraction_quality": "JSON",
-                "processing_flags": "JSON",
-                "ocr_used": "BOOLEAN DEFAULT FALSE",
-            },
-            "chunks": {
-                "title": "VARCHAR(1024)",
-                "chapter": "VARCHAR(1024)",
-                "section": "VARCHAR(1024)",
-                "heading_path": "JSON",
-                "page_number": "INTEGER",
-                "extraction_method": "VARCHAR(64)",
-                "content_type": "VARCHAR(64)",
-                "quality_flags": "JSON",
-                "metadata": "JSON",
-            },
-            "chat_messages": {
-                "status": "VARCHAR(32) DEFAULT 'completed'",
-            },
-            "retrieval_logs": {
-                "chunk_title": "VARCHAR(1024)",
-                "chapter": "VARCHAR(1024)",
-                "section": "VARCHAR(1024)",
-                "page_number": "INTEGER",
-                "tags": "JSON",
-            },
-        }
-
-        with self.engine.begin() as connection:
-            for table_name, specs in column_specs.items():
-                if table_name not in table_names:
-                    continue
-                existing_columns = {column["name"] for column in inspector.get_columns(table_name)}
-                for column_name, ddl in specs.items():
-                    if column_name in existing_columns:
-                        continue
-                    connection.execute(text(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {ddl}"))
-
-            if "chat_messages" in table_names:
-                connection.execute(text("UPDATE chat_messages SET status = 'completed' WHERE status IS NULL"))
-            if "files" in table_names:
-                connection.execute(text("UPDATE files SET extension = '' WHERE extension IS NULL"))
-                connection.execute(text("UPDATE files SET size_bytes = 0 WHERE size_bytes IS NULL"))
-                connection.execute(text("UPDATE files SET chunk_count = 0 WHERE chunk_count IS NULL"))
-                connection.execute(text("UPDATE files SET is_embedded = FALSE WHERE is_embedded IS NULL"))
-                connection.execute(text("UPDATE files SET is_enabled = TRUE WHERE is_enabled IS NULL"))
+        retry(lambda: run_migrations(str(self.engine.url)))
 
     @contextmanager
     def session(self) -> Iterator[Session]:
@@ -264,9 +190,23 @@ class PostgresClient:
             if chat is not None:
                 chat.updated_at = datetime.now(timezone.utc)
 
-    def add_chat_message(self, session_id: str, role: str, content: str, status: str = "completed") -> ChatMessage:
+    def add_chat_message(
+        self,
+        session_id: str,
+        role: str,
+        content: str,
+        status: str = "completed",
+        *,
+        has_attachments: bool = False,
+    ) -> ChatMessage:
         with self.session() as session:
-            message = ChatMessage(session_id=session_id, role=role, content=content, status=status)
+            message = ChatMessage(
+                session_id=session_id,
+                role=role,
+                content=content,
+                status=status,
+                has_attachments=has_attachments,
+            )
             session.add(message)
             self._touch_chat_in_session(session, session_id)
             session.flush()
@@ -279,6 +219,38 @@ class PostgresClient:
                 select(ChatMessage).where(ChatMessage.session_id == chat_id).order_by(ChatMessage.created_at.asc(), ChatMessage.id.asc())
             )
             return list(rows)
+
+    def add_message_attachments(self, message_id: int, attachments: list[dict[str, object]]) -> list[MessageAttachment]:
+        with self.session() as session:
+            records: list[MessageAttachment] = []
+            for attachment in attachments:
+                record = MessageAttachment(
+                    message_id=message_id,
+                    file_name=str(attachment["file_name"]),
+                    file_type=str(attachment["type"]),
+                    extraction_method=str(attachment.get("extraction_method") or "") or None,
+                    quality=dict(attachment.get("quality") or {}),
+                )
+                session.add(record)
+                records.append(record)
+            session.flush()
+            for record in records:
+                session.refresh(record)
+            return records
+
+    def get_attachments_by_message_ids(self, message_ids: list[int]) -> dict[int, list[MessageAttachment]]:
+        if not message_ids:
+            return {}
+        with self.session() as session:
+            rows = session.scalars(
+                select(MessageAttachment)
+                .where(MessageAttachment.message_id.in_(message_ids))
+                .order_by(MessageAttachment.message_id.asc(), MessageAttachment.id.asc())
+            )
+            grouped: dict[int, list[MessageAttachment]] = {}
+            for row in rows:
+                grouped.setdefault(row.message_id, []).append(row)
+            return grouped
 
     def get_recent_chat_history(self, session_id: str, limit: int) -> list[ChatMessage]:
         with self.session() as session:

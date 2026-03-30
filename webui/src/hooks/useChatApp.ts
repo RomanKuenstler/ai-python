@@ -1,18 +1,29 @@
 import { useEffect, useMemo, useState } from "react";
 import { apiClient } from "../api/client";
-import type { Chat, LibraryFile, LibraryResponse, Message } from "../types/chat";
+import type { AttachmentMeta, Chat, LibraryFile, LibraryResponse, Message } from "../types/chat";
 
 const ACTIVE_CHAT_STORAGE_KEY = "local-rag-active-chat";
 
-function createOptimisticMessage(chatId: string, role: "user" | "assistant", content: string, status: Message["status"]): Message {
+export const ATTACHMENT_MAX_FILES = 3;
+export const ATTACHMENT_ALLOWED_EXTENSIONS = [".txt", ".md", ".html", ".htm", ".pdf", ".epub", ".csv", ".png", ".jpg", ".jpeg", ".webp"];
+
+function createOptimisticMessage(
+  chatId: string,
+  role: "user" | "assistant",
+  content: string,
+  status: Message["status"],
+  attachments: AttachmentMeta[] = [],
+): Message {
   return {
     id: `temp-${role}-${crypto.randomUUID()}`,
     chat_id: chatId,
     role,
     content,
     status,
+    has_attachments: attachments.length > 0,
     created_at: new Date().toISOString(),
     sources: [],
+    attachments,
   };
 }
 
@@ -124,13 +135,19 @@ export function useChatApp() {
     return created.id;
   }
 
-  async function sendMessage(content: string) {
+  async function sendMessage(content: string, attachments: File[] = []) {
     if (!activeChatId || !content.trim() || sending) {
       return;
     }
 
     const chatId = activeChatId;
-    const optimisticUser = createOptimisticMessage(chatId, "user", content, "completed");
+    const optimisticAttachments = attachments.map<AttachmentMeta>((file) => ({
+      file_name: file.name,
+      file_type: file.name.split(".").pop()?.toLowerCase() ?? "unknown",
+      extraction_method: null,
+      quality: {},
+    }));
+    const optimisticUser = createOptimisticMessage(chatId, "user", content, "completed", optimisticAttachments);
     const optimisticAssistant = createOptimisticMessage(chatId, "assistant", "Thinking...", "pending");
 
     setSending(true);
@@ -141,7 +158,7 @@ export function useChatApp() {
     }));
 
     try {
-      const response = await apiClient.sendMessage(chatId, content);
+      const response = await apiClient.sendMessage(chatId, content, attachments);
       setMessagesByChat((current) => ({
         ...current,
         [chatId]: [
@@ -255,6 +272,10 @@ export function useChatApp() {
     libraryError,
     uploading,
     busyFileIds,
+    attachmentRules: {
+      maxFiles: ATTACHMENT_MAX_FILES,
+      allowedExtensions: ATTACHMENT_ALLOWED_EXTENSIONS,
+    },
     bootstrap,
     ensureChatLoaded,
     createChat,

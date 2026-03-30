@@ -16,6 +16,8 @@ class PromptBuilder:
         user_message: str,
         history: list[tuple[str, str]],
         retrieved_chunks: list[dict[str, str | float | list[str]]],
+        attachments: list[dict[str, object]] | None = None,
+        attachment_char_limit: int = 15000,
     ) -> list[tuple[str, str]]:
         evidence_quality = "weak"
         if len(retrieved_chunks) >= 4:
@@ -46,8 +48,37 @@ class PromptBuilder:
             ("system", self.assistant),
             ("system", rag_context),
         ]
+        messages.append(("system", self._build_attachment_context(attachments or [], attachment_char_limit)))
         if history:
             history_text = "\n".join(f"{role.upper()}: {content}" for role, content in history)
-            messages.append(("system", history_text))
+            messages.append(("system", f"[chat history]\n{history_text}"))
         messages.append(("user", user_message))
         return messages
+
+    def _build_attachment_context(self, attachments: list[dict[str, object]], char_limit: int) -> str:
+        if not attachments:
+            return "[ATTACHMENT CONTEXT]\nNo attachments provided."
+
+        remaining = max(char_limit, 0)
+        rendered: list[str] = []
+        for attachment in attachments:
+            content = str(attachment.get("content") or "").strip()
+            if not content or remaining <= 0:
+                continue
+            excerpt = content[:remaining]
+            remaining -= len(excerpt)
+            rendered.append(
+                "\n".join(
+                    [
+                        f"File: {attachment.get('file_name', 'unknown')}",
+                        f"Type: {attachment.get('type', 'unknown')}",
+                        f"Extraction: {attachment.get('extraction_method') or 'unknown'}",
+                        f"Quality: {attachment.get('quality') or {}}",
+                        "Content:",
+                        excerpt,
+                    ]
+                )
+            )
+        if not rendered:
+            return "[ATTACHMENT CONTEXT]\nAttachments were provided but no usable text could be extracted."
+        return "[ATTACHMENT CONTEXT]\n\n" + "\n\n---\n\n".join(rendered)
