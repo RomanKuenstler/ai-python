@@ -27,4 +27,5 @@ def get_retriever_service() -> RetrieverAppService:
         llm_api_key=settings.llm_api_key,
         prompts_dir=prompts_dir,
         history_limit=settings.history_limit,
+        settings=settings,
     )

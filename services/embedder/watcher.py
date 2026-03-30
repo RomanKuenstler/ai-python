@@ -11,9 +11,6 @@ from services.embedder.utils import compute_sha256, load_tags
 LOGGER = logging.getLogger(__name__)
 
 
-SUPPORTED_EXTENSIONS = {".md", ".txt", ".html", ".htm", ".pdf", ".epub"}
-
-
 class PollingWatcher:
     def __init__(self, *, data_dir: Path, interval_seconds: int, processor: FileProcessor, settings: Settings) -> None:
         self.data_dir = data_dir
@@ -31,14 +28,20 @@ class PollingWatcher:
         disk_files = {
             str(path.relative_to(self.data_dir)): path
             for path in self.data_dir.rglob("*")
-            if path.is_file() and path.suffix.lower() in SUPPORTED_EXTENSIONS
+            if path.is_file() and path.suffix.lower() in self.settings.allowed_upload_extension_set
         }
         tracked_files = {record.file_path: record for record in self.processor.postgres_client.list_files()}
 
         for relative_path, absolute_path in disk_files.items():
             file_hash = compute_sha256(absolute_path)
             tracked = tracked_files.get(relative_path)
-            needs_reindex = tracked is None or tracked.file_hash != file_hash or self._settings_changed(tracked)
+            resolved_tags = self.processor.resolve_tags(relative_path, absolute_path.name)
+            needs_reindex = (
+                tracked is None
+                or tracked.file_hash != file_hash
+                or self._settings_changed(tracked)
+                or list(tracked.tags or []) != resolved_tags
+            )
             if needs_reindex:
                 reason = "new" if tracked is None else "content_or_settings_changed"
                 LOGGER.info("Detected file change", extra={"file_path": relative_path, "reindex_reason": reason})

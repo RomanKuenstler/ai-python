@@ -26,3 +26,14 @@
 - Added a React + Vite frontend with sidebar chat navigation, optimistic message sending, loading/error handling, and per-answer Sources panels.
 - Updated Docker Compose, environment examples, and service images to run the web UI and retriever API together.
 - Added Step 3 documentation for the frontend, API, chat model, setup, testing, and updated database/retriever notes.
+
+## 2026-03-29 03:00 UTC
+
+- Added Step 4 library management with backend file listing, upload, enable or disable, and full deletion endpoints.
+- Extended file metadata persistence for extension, size, chunk count, embedded state, enabled state, and default-tag handling.
+- Added synchronous upload processing into the shared `data/` directory plus `tags.json` persistence and duplicate upload guards.
+- Updated retrieval to ignore disabled files even while their vectors remain indexed.
+- Added chat rename and delete backend actions with message and retrieval-log cleanup.
+- Reworked the web UI into routed chat and library views with sidebar `Library` navigation, upload dialogs, file actions, and chat hover menus.
+- Added safe assistant markdown rendering with `react-markdown`, GitHub-flavored markdown support, and sanitization.
+- Added Step 4 API and backend tests, refreshed frontend build validation, and documented library, upload, chat-management, frontend, API, and testing behavior.

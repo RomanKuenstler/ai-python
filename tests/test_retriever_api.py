@@ -4,7 +4,7 @@ from fastapi.testclient import TestClient
 
 from services.retriever.api.app import create_app
 from services.retriever.api.dependencies import get_retriever_service
-from services.retriever.schemas.chat import ChatRead, MessageRead, SourceRead
+from services.retriever.schemas.chat import ChatRead, LibraryFileRead, LibraryListResponse, LibrarySummaryRead, MessageRead, SourceRead
 
 
 class StubRetrieverService:
@@ -20,6 +20,21 @@ class StubRetrieverService:
         return [self.create_chat()]
 
     def get_chat(self, chat_id: str) -> ChatRead | None:
+        if chat_id != "chat-1":
+            return None
+        return self.create_chat()
+
+    def rename_chat(self, chat_id: str, chat_name: str) -> ChatRead | None:
+        if chat_id != "chat-1":
+            return None
+        return ChatRead(
+            id="chat-1",
+            chat_name=chat_name,
+            created_at="2026-03-29T00:00:00Z",
+            updated_at="2026-03-29T00:00:02Z",
+        )
+
+    def delete_chat(self, chat_id: str) -> ChatRead | None:
         if chat_id != "chat-1":
             return None
         return self.create_chat()
@@ -89,6 +104,45 @@ class StubRetrieverService:
             ],
         }
 
+    def list_library_files(self) -> LibraryListResponse:
+        return LibraryListResponse(
+            files=[
+                LibraryFileRead(
+                    id=1,
+                    file_name="manual.pdf",
+                    file_path="/app/data/manual.pdf",
+                    file_type="pdf",
+                    extension=".pdf",
+                    size_bytes=1024,
+                    chunk_count=3,
+                    tags=["docker"],
+                    is_embedded=True,
+                    is_enabled=True,
+                    processing_status="processed",
+                    updated_at="2026-03-29T00:00:00Z",
+                )
+            ],
+            summary=LibrarySummaryRead(total_files=1, embedded_files=1, total_chunks=3),
+            allowed_extensions=[".md", ".pdf"],
+            max_upload_files=5,
+            upload_max_file_size_mb=50,
+            default_tag="default",
+        )
+
+    def upload_library_files(self, uploads, tags_by_file_raw: str | None):
+        return {"files": self.list_library_files().files}
+
+    def update_library_file(self, file_id: int, *, is_enabled: bool):
+        if file_id != 1:
+            return None
+        record = self.list_library_files().files[0]
+        return record.model_copy(update={"is_enabled": is_enabled})
+
+    def delete_library_file(self, file_id: int):
+        if file_id != 1:
+            return None
+        return self.list_library_files().files[0]
+
 
 def build_client() -> TestClient:
     app = create_app()
@@ -113,6 +167,13 @@ def test_chat_endpoints() -> None:
     assert list_response.status_code == 200
     assert len(list_response.json()) == 1
 
+    rename_response = client.patch("/api/chats/chat-1", json={"chat_name": "Renamed chat"})
+    assert rename_response.status_code == 200
+    assert rename_response.json()["chat_name"] == "Renamed chat"
+
+    delete_response = client.delete("/api/chats/chat-1")
+    assert delete_response.status_code == 200
+
 
 def test_post_message_returns_sources() -> None:
     client = build_client()
@@ -129,3 +190,18 @@ def test_missing_chat_returns_404() -> None:
     response = client.get("/api/chats/missing")
     assert response.status_code == 404
     assert response.json() == {"detail": "Chat not found"}
+
+
+def test_library_endpoints() -> None:
+    client = build_client()
+
+    list_response = client.get("/api/library/files")
+    assert list_response.status_code == 200
+    assert list_response.json()["files"][0]["extension"] == ".pdf"
+
+    patch_response = client.patch("/api/library/files/1", json={"is_enabled": False})
+    assert patch_response.status_code == 200
+    assert patch_response.json()["is_enabled"] is False
+
+    delete_response = client.delete("/api/library/files/1")
+    assert delete_response.status_code == 200

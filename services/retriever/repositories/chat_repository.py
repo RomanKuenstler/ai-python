@@ -20,6 +20,12 @@ class ChatRepository:
     def get_chat(self, chat_id: str) -> ChatSession | None:
         return self.postgres_client.get_chat(chat_id)
 
+    def rename_chat(self, chat_id: str, chat_name: str) -> ChatSession | None:
+        return self.postgres_client.rename_chat(chat_id, chat_name)
+
+    def delete_chat(self, chat_id: str) -> ChatSession | None:
+        return self.postgres_client.delete_chat(chat_id)
+
     def list_messages(self, chat_id: str) -> list[ChatMessage]:
         return self.postgres_client.get_chat_messages(chat_id)
 

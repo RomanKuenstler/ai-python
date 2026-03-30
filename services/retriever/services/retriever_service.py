@@ -3,7 +3,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+from services.common.config import Settings
 from services.embedder.embedding import EmbeddingClient
+from services.embedder.chunking import Chunker
+from services.embedder.postgres_client import EmbedderPostgresClient
+from services.embedder.processor import FileProcessor
+from services.embedder.qdrant_client import EmbedderQdrantClient
 from services.retriever.chat_history import ChatHistoryService
 from services.retriever.llm_client import LlmClient
 from services.retriever.prompt_builder import PromptBuilder
@@ -11,6 +16,7 @@ from services.retriever.qdrant_client import RetrieverQdrantClient
 from services.retriever.repositories.chat_repository import ChatRepository
 from services.retriever.retriever import RetrievalService
 from services.retriever.services.chat_naming import generate_chat_name
+from services.retriever.services.library_manager import LibraryManager, UploadFilePayload
 from services.retriever.services.message_mapper import map_chat, map_message, map_source
 
 
@@ -21,6 +27,7 @@ class RetrieverDependencies:
     retrieval_service: RetrievalService
     prompt_builder: PromptBuilder
     llm_client: LlmClient
+    library_manager: LibraryManager
 
 
 class RetrieverAppService:
@@ -30,6 +37,7 @@ class RetrieverAppService:
         self.retrieval_service = deps.retrieval_service
         self.prompt_builder = deps.prompt_builder
         self.llm_client = deps.llm_client
+        self.library_manager = deps.library_manager
 
     def create_chat(self):
         chat = self.chat_repository.create_chat(generate_chat_name())
@@ -49,6 +57,35 @@ class RetrieverAppService:
         assistant_ids = [message.id for message in messages if message.role == "assistant"]
         sources_by_message = self.chat_repository.get_sources_by_assistant_message(assistant_ids)
         return [map_message(message, sources_by_message.get(message.id)) for message in messages]
+
+    def rename_chat(self, chat_id: str, chat_name: str):
+        normalized_name = chat_name.strip()
+        if not normalized_name:
+            raise ValueError("Chat name cannot be empty")
+        chat = self.chat_repository.rename_chat(chat_id, normalized_name)
+        if chat is None:
+            return None
+        return map_chat(chat)
+
+    def delete_chat(self, chat_id: str):
+        chat = self.chat_repository.delete_chat(chat_id)
+        if chat is None:
+            return None
+        return map_chat(chat)
+
+    def list_library_files(self):
+        return self.library_manager.list_files()
+
+    def update_library_file(self, file_id: int, *, is_enabled: bool):
+        return self.library_manager.update_file_state(file_id, is_enabled=is_enabled)
+
+    def delete_library_file(self, file_id: int):
+        return self.library_manager.delete_file(file_id)
+
+    def upload_library_files(self, uploads: list[UploadFilePayload], tags_by_file_raw: str | None):
+        tags_by_file = self.library_manager.parse_tags_mapping(tags_by_file_raw)
+        files = self.library_manager.upload_files(uploads, tags_by_file)
+        return {"files": files}
 
     def send_message(self, chat_id: str, user_content: str):
         chat = self.chat_repository.get_chat(chat_id)
@@ -97,12 +134,30 @@ def build_retriever_app_service(
     llm_api_key: str,
     prompts_dir: Path,
     history_limit: int,
+    settings: Settings,
 ) -> RetrieverAppService:
     from services.retriever.postgres_client import RetrieverPostgresClient
 
     postgres_client = RetrieverPostgresClient(database_url)
     postgres_client.initialize()
+    embedder_postgres_client = EmbedderPostgresClient(database_url)
+    embedder_postgres_client.initialize()
     chat_repository = ChatRepository(postgres_client)
+    data_dir = Path(settings.data_dir)
+    library_processor = FileProcessor(
+        data_dir=data_dir,
+        chunker=Chunker(settings.chunk_size, settings.chunk_overlap),
+        embedding_client=EmbeddingClient(
+            model=embedding_model,
+            base_url=embedding_base_url,
+            api_key=embedding_api_key,
+            max_input_tokens=embedding_max_input_tokens,
+        ),
+        postgres_client=embedder_postgres_client,
+        qdrant_client=EmbedderQdrantClient(settings.qdrant_url, settings.qdrant_collection),
+        tags_map={},
+        settings=settings,
+    )
     deps = RetrieverDependencies(
         chat_repository=chat_repository,
         history_service=ChatHistoryService(postgres_client, history_limit),
@@ -117,9 +172,11 @@ def build_retriever_app_service(
             score_threshold=retrieval_score_threshold,
             min_results=retrieval_min_results,
             max_results=retrieval_max_results,
+            enabled_file_paths_lookup=postgres_client.enabled_file_paths_for_candidates,
         ),
         prompt_builder=PromptBuilder(prompts_dir),
         llm_client=LlmClient(model=llm_model, base_url=llm_base_url, api_key=llm_api_key),
+        library_manager=LibraryManager(data_dir=data_dir, processor=library_processor, settings=settings),
     )
     return RetrieverAppService(deps)
 

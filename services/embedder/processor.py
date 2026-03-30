@@ -9,7 +9,7 @@ from services.embedder.embedding import EmbeddingClient
 from services.embedder.postgres_client import EmbedderPostgresClient
 from services.embedder.processors.processor_registry import ProcessorRegistry
 from services.embedder.qdrant_client import EmbedderQdrantClient
-from services.embedder.utils import compute_sha256
+from services.embedder.utils import compute_sha256, normalize_tags
 
 LOGGER = logging.getLogger(__name__)
 
@@ -72,10 +72,14 @@ class FileProcessor:
             file_payload={
                 "file_path": relative_path,
                 "file_name": file_path.name,
+                "extension": file_path.suffix.lower(),
+                "size_bytes": file_path.stat().st_size,
+                "chunk_count": len(tagged_chunks),
                 "file_hash": file_hash,
                 "content_hash": extraction.metadata.get("content_hash", ""),
                 "file_type": extraction.metadata.get("extension", "").lstrip(".") or "unknown",
                 "processing_status": extraction.processing_flags.get("processing_status", "processed"),
+                "is_embedded": bool(tagged_chunks),
                 "processing_error": extraction.processing_flags.get("processing_error"),
                 "last_extraction_method": extraction.metadata.get("extraction_method"),
                 "document_title": extraction.document_title,
@@ -103,4 +107,5 @@ class FileProcessor:
         LOGGER.info("Deleted file state", extra={"file_path": relative_path})
 
     def resolve_tags(self, relative_path: str, file_name: str) -> list[str]:
-        return self.tags_map.get(relative_path, self.tags_map.get(file_name, []))
+        tags = self.tags_map.get(relative_path, self.tags_map.get(file_name, []))
+        return normalize_tags(tags, self.settings.default_tag)

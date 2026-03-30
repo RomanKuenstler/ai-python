@@ -7,6 +7,21 @@ import unicodedata
 from pathlib import Path
 
 
+def normalize_tags(tags: list[str] | tuple[str, ...], default_tag: str) -> list[str]:
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for tag in tags:
+        cleaned = str(tag).strip()
+        if not cleaned:
+            continue
+        key = cleaned.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        normalized.append(cleaned)
+    return normalized or [default_tag]
+
+
 def compute_sha256(file_path: Path) -> str:
     digest = hashlib.sha256()
     with file_path.open("rb") as handle:
@@ -36,3 +51,10 @@ def load_tags(tags_path: Path) -> dict[str, list[str]]:
     with tags_path.open("r", encoding="utf-8") as handle:
         content = json.load(handle)
     return {str(key): [str(tag) for tag in value] for key, value in content.items()}
+
+
+def save_tags(tags_path: Path, tags_map: dict[str, list[str]]) -> None:
+    tags_path.parent.mkdir(parents=True, exist_ok=True)
+    with tags_path.open("w", encoding="utf-8") as handle:
+        json.dump(tags_map, handle, indent=2, sort_keys=True)
+        handle.write("\n")

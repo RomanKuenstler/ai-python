@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from services.common.models import ChatMessage, ChatSession, RetrievalLog
-from services.retriever.schemas.chat import ChatRead, MessageRead, SourceRead
+from services.common.models import ChatMessage, ChatSession, FileRecord, RetrievalLog
+from services.retriever.schemas.chat import ChatRead, LibraryFileRead, MessageRead, SourceRead
 
 
 def map_chat(chat: ChatSession) -> ChatRead:
@@ -36,4 +36,21 @@ def map_message(message: ChatMessage, sources: list[RetrievalLog] | None = None)
         status=message.status,
         created_at=message.created_at,
         sources=[map_source(log) for log in (sources or [])],
+    )
+
+
+def map_library_file(record: FileRecord) -> LibraryFileRead:
+    return LibraryFileRead(
+        id=record.id,
+        file_name=record.file_name,
+        file_path=record.file_path,
+        file_type=record.file_type,
+        extension=record.extension,
+        size_bytes=record.size_bytes,
+        chunk_count=record.chunk_count,
+        tags=list(record.tags or []),
+        is_embedded=record.is_embedded,
+        is_enabled=record.is_enabled,
+        processing_status=record.processing_status,
+        updated_at=record.updated_at,
     )

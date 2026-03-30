@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { apiClient } from "../api/client";
-import type { Chat, Message } from "../types/chat";
+import type { Chat, LibraryFile, LibraryResponse, Message } from "../types/chat";
 
 const ACTIVE_CHAT_STORAGE_KEY = "local-rag-active-chat";
 
@@ -17,47 +17,59 @@ function createOptimisticMessage(chatId: string, role: "user" | "assistant", con
 }
 
 export function useChatApp() {
+  const [bootstrapping, setBootstrapping] = useState(true);
   const [chats, setChats] = useState<Chat[]>([]);
-  const [activeChatId, setActiveChatId] = useState<string | null>(null);
   const [messagesByChat, setMessagesByChat] = useState<Record<string, Message[]>>({});
+  const [activeChatId, setActiveChatId] = useState<string | null>(null);
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [sending, setSending] = useState(false);
   const [appError, setAppError] = useState<string | null>(null);
+  const [library, setLibrary] = useState<LibraryResponse | null>(null);
+  const [libraryLoading, setLibraryLoading] = useState(false);
+  const [libraryError, setLibraryError] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [busyFileIds, setBusyFileIds] = useState<number[]>([]);
 
   useEffect(() => {
     void bootstrap();
   }, []);
 
   async function bootstrap() {
+    setBootstrapping(true);
     setAppError(null);
     try {
       const chatList = await apiClient.listChats();
       if (chatList.length === 0) {
-        const chat = await apiClient.createChat();
-        setChats([chat]);
-        setActiveChat(chat.id);
-        await loadMessages(chat.id);
-        return;
-      }
-
-      setChats(chatList);
-      const persistedChatId = window.localStorage.getItem(ACTIVE_CHAT_STORAGE_KEY);
-      const nextChatId = chatList.some((chat) => chat.id === persistedChatId) ? persistedChatId : chatList[0].id;
-      if (nextChatId) {
-        setActiveChat(nextChatId);
-        await loadMessages(nextChatId);
+        const created = await apiClient.createChat();
+        setChats([created]);
+        setActiveChatInternal(created.id);
+        setMessagesByChat({ [created.id]: [] });
+      } else {
+        setChats(chatList);
+        const persistedChatId = window.localStorage.getItem(ACTIVE_CHAT_STORAGE_KEY);
+        const nextChatId = chatList.some((chat) => chat.id === persistedChatId) ? persistedChatId : chatList[0].id;
+        setActiveChatInternal(nextChatId);
       }
     } catch (error) {
       setAppError(error instanceof Error ? error.message : "Failed to load chats");
+    } finally {
+      setBootstrapping(false);
     }
   }
 
-  function setActiveChat(chatId: string) {
+  function setActiveChatInternal(chatId: string | null) {
     setActiveChatId(chatId);
-    window.localStorage.setItem(ACTIVE_CHAT_STORAGE_KEY, chatId);
+    if (chatId) {
+      window.localStorage.setItem(ACTIVE_CHAT_STORAGE_KEY, chatId);
+    }
   }
 
-  async function loadMessages(chatId: string) {
+  async function ensureChatLoaded(chatId: string) {
+    setActiveChatInternal(chatId);
+    if (messagesByChat[chatId] !== undefined) {
+      return;
+    }
+
     setLoadingMessages(true);
     setAppError(null);
     try {
@@ -72,21 +84,44 @@ export function useChatApp() {
 
   async function createChat() {
     setAppError(null);
-    try {
-      const chat = await apiClient.createChat();
-      setChats((current) => [chat, ...current]);
-      setMessagesByChat((current) => ({ ...current, [chat.id]: [] }));
-      setActiveChat(chat.id);
-    } catch (error) {
-      setAppError(error instanceof Error ? error.message : "Failed to create chat");
-    }
+    const chat = await apiClient.createChat();
+    setChats((current) => [chat, ...current]);
+    setMessagesByChat((current) => ({ ...current, [chat.id]: [] }));
+    setActiveChatInternal(chat.id);
+    return chat;
   }
 
-  async function selectChat(chatId: string) {
-    setActiveChat(chatId);
-    if (messagesByChat[chatId] === undefined) {
-      await loadMessages(chatId);
+  async function renameChat(chatId: string, chatName: string) {
+    const updated = await apiClient.renameChat(chatId, { chat_name: chatName });
+    setChats((current) =>
+      current
+        .map((chat) => (chat.id === chatId ? updated : chat))
+        .sort((left, right) => right.updated_at.localeCompare(left.updated_at)),
+    );
+    return updated;
+  }
+
+  async function deleteChat(chatId: string) {
+    await apiClient.deleteChat(chatId);
+    setChats((current) => current.filter((chat) => chat.id !== chatId));
+    setMessagesByChat((current) => {
+      const next = { ...current };
+      delete next[chatId];
+      return next;
+    });
+
+    const remaining = chats.filter((chat) => chat.id !== chatId);
+    if (remaining.length > 0) {
+      const nextActive = remaining[0].id;
+      setActiveChatInternal(nextActive);
+      return nextActive;
     }
+
+    const created = await apiClient.createChat();
+    setChats([created]);
+    setMessagesByChat({ [created.id]: [] });
+    setActiveChatInternal(created.id);
+    return created.id;
   }
 
   async function sendMessage(content: string) {
@@ -120,9 +155,7 @@ export function useChatApp() {
       }));
       setChats((current) =>
         current
-          .map((chat) =>
-            chat.id === chatId ? { ...chat, updated_at: new Date().toISOString() } : chat,
-          )
+          .map((chat) => (chat.id === chatId ? { ...chat, updated_at: new Date().toISOString() } : chat))
           .sort((left, right) => right.updated_at.localeCompare(left.updated_at)),
       );
     } catch (error) {
@@ -145,6 +178,63 @@ export function useChatApp() {
     }
   }
 
+  async function loadLibrary() {
+    setLibraryLoading(true);
+    setLibraryError(null);
+    try {
+      setLibrary(await apiClient.listLibraryFiles());
+    } catch (error) {
+      setLibraryError(error instanceof Error ? error.message : "Failed to load library");
+    } finally {
+      setLibraryLoading(false);
+    }
+  }
+
+  async function toggleLibraryFile(file: LibraryFile) {
+    setBusyFileIds((current) => [...current, file.id]);
+    setLibraryError(null);
+    try {
+      const updated = await apiClient.updateLibraryFile(file.id, { is_enabled: !file.is_enabled });
+      setLibrary((current) =>
+        current
+          ? { ...current, files: current.files.map((item) => (item.id === file.id ? updated : item)) }
+          : current,
+      );
+    } catch (error) {
+      setLibraryError(error instanceof Error ? error.message : "Failed to update file");
+    } finally {
+      setBusyFileIds((current) => current.filter((id) => id !== file.id));
+    }
+  }
+
+  async function deleteLibraryFile(fileId: number) {
+    setBusyFileIds((current) => [...current, fileId]);
+    setLibraryError(null);
+    try {
+      await apiClient.deleteLibraryFile(fileId);
+      await loadLibrary();
+    } catch (error) {
+      setLibraryError(error instanceof Error ? error.message : "Failed to delete file");
+    } finally {
+      setBusyFileIds((current) => current.filter((id) => id !== fileId));
+    }
+  }
+
+  async function uploadLibraryFiles(files: File[], tagsByFile: Record<string, string[]>) {
+    setUploading(true);
+    setLibraryError(null);
+    try {
+      await apiClient.uploadLibraryFiles(files, tagsByFile);
+      await loadLibrary();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to upload files";
+      setLibraryError(message);
+      throw error;
+    } finally {
+      setUploading(false);
+    }
+  }
+
   const activeMessages = useMemo(() => {
     if (!activeChatId) {
       return [];
@@ -153,14 +243,27 @@ export function useChatApp() {
   }, [activeChatId, messagesByChat]);
 
   return {
+    bootstrapping,
     chats,
     activeChatId,
     activeMessages,
     loadingMessages,
     sending,
     appError,
+    library,
+    libraryLoading,
+    libraryError,
+    uploading,
+    busyFileIds,
+    bootstrap,
+    ensureChatLoaded,
     createChat,
-    selectChat,
+    renameChat,
+    deleteChat,
     sendMessage,
+    loadLibrary,
+    toggleLibraryFile,
+    deleteLibraryFile,
+    uploadLibraryFiles,
   };
 }

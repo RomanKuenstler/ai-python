@@ -2,48 +2,14 @@
 
 ## Automated Checks
 
-Run the local test suite from a virtualenv:
+Create a local Python 3.12 virtualenv and run the backend tests:
 
 ```bash
-/opt/homebrew/bin/python3.11 -m venv .venv311
-. .venv311/bin/activate
-python -m pip install -r services/embedder/requirements.txt -r services/retriever/requirements.txt
-pytest -q
-```
-
-The current test coverage focuses on:
-
-- HTML cleanup and semantic preservation
-- extraction quality heuristics
-- EPUB front matter and repeated chrome handling
-- retriever source formatting
-- Step 3 API contract coverage
-
-## Smoke Checks
-
-Useful smoke checks during development:
-
-```bash
-. .venv311/bin/activate
+/opt/homebrew/bin/python3.12 -m venv .venv312
+. .venv312/bin/activate
+python -m pip install -r services/retriever/requirements.txt -r services/embedder/requirements.txt
+python -m pytest tests/test_retriever_api.py tests/test_step4_backend.py -q
 python -m compileall services tests
-```
-
-And a direct processor smoke run against sample data:
-
-```bash
-. .venv311/bin/activate
-python - <<'PY'
-from pathlib import Path
-from services.common.config import Settings
-from services.embedder.processors.processor_registry import ProcessorRegistry
-
-root = Path("data")
-settings = Settings(data_dir=str(root.resolve()))
-registry = ProcessorRegistry(settings=settings, data_dir=root.resolve())
-for rel in ["AI_IPS.md", "Developing with Docker.pdf", "Deployment with Docker.epub"]:
-    result = registry.for_path(root / rel).process(file_path=(root / rel).resolve(), relative_path=rel, tags=[])
-    print(rel, result.processing_flags["processing_status"], result.metadata.get("extraction_method"), len(result.semantic_blocks))
-PY
 ```
 
 Frontend build smoke check:
@@ -54,32 +20,33 @@ npm install
 npm run build
 ```
 
-## What Was Verified
+## Step 4 Checks Covered
 
-- `.html` and `.htm` extraction logic through unit coverage
-- markdown/text regression behavior through shared processors and smoke extraction
-- direct PDF extraction on the sample digital PDF
-- EPUB spine-order extraction and front-matter cleanup on the sample EPUB
-- CLI source rendering format
-- FastAPI health, chat listing, message posting, and source payload shape
+- chat rename and delete API contracts
+- library list, patch, and delete API contracts
+- default tag normalization
+- disabled-file retrieval filtering
+- frontend TypeScript and production build
 
-## Step 3 Smoke Test
+## Manual Smoke Test
 
 1. Run `docker compose up --build`.
 2. Open `http://localhost:5173`.
-3. Create multiple chats from the sidebar.
-4. Send one message in chat A and a different message in chat B.
-5. Switch between chats and confirm histories stay isolated.
-6. Watch the assistant loading state appear and get replaced by the final answer.
-7. Open the `Sources` panel below an assistant answer and confirm metadata is shown.
-8. Refresh the page and confirm the chats and messages still load.
-9. Optionally run `docker compose --profile cli run --rm retriever` to confirm the legacy CLI path still works.
+3. Open `Library` from the sidebar.
+4. Upload one supported file with tags.
+5. Upload one supported file with an empty tag field and confirm it becomes `default`.
+6. Disable a file and confirm it stays visible in Library but no longer appears in retrieval-backed answers.
+7. Re-enable the file and confirm it becomes available again.
+8. Delete a file and confirm it disappears from the UI and `data/`.
+9. Rename a chat from the sidebar hover menu.
+10. Delete a chat and confirm the app falls back to another chat or creates a new one.
+11. Refresh the page and confirm both chats and library state reload.
+12. Send an assistant prompt that returns markdown and confirm headings, lists, inline code, and fenced code blocks render properly.
 
-## Debugging Tips
+## Debugging Notes
 
-- If retrieval sources are empty, inspect `RETRIEVAL_SCORE_THRESHOLD`.
-- If the web UI cannot reach the API, verify `VITE_API_BASE_URL`, `API_PORT`, and Docker port publishing.
-- If a chat opens with no history after refresh, confirm PostgreSQL is healthy and `chat_messages.session_id` rows exist for that chat.
-- If a file keeps reprocessing, compare the stored processing signature fields in `files`.
-- If a PDF produces no chunks, inspect the stored `processing_status`, `processing_error`, and `extraction_quality`.
-- If OCR is required, validate the embedder Docker image rather than the host Python environment.
+- If upload endpoints fail at startup, confirm `python-multipart` is installed in the backend environment.
+- If uploads appear in `data/` but not in Library, inspect backend logs for embedding or processor errors.
+- If a disabled file still appears in sources, verify the `files.is_enabled` flag in PostgreSQL and rerun retrieval.
+- If file deletion becomes inconsistent, compare the local `data/` folder, Postgres `files` and `chunks` rows, and Qdrant payloads for the same file path.
+- If markdown renders as plain text, confirm the frontend bundle includes `react-markdown`, `remark-gfm`, and `rehype-sanitize`.

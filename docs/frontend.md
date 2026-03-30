@@ -5,35 +5,72 @@
 - React 18
 - TypeScript
 - Vite
-- plain modular CSS
+- `react-router-dom`
+- `react-markdown` with `remark-gfm`
+- `rehype-sanitize` for safe markdown rendering
 
 ## Layout
 
-The Step 3 UI is split into two areas:
+The Step 4 UI keeps a shared two-column shell:
 
-- a left sidebar with branding, a `New chat` action, the chat list, and a footer placeholder
-- a main chat surface with the conversation history, error/loading feedback, and a fixed bottom input
+- left sidebar with branding, `New chat`, `Library`, chat list, and footer placeholder
+- right content area that switches between the chat page and the Library page
 
 ## Major Components
 
-- `AppShell` handles the two-column layout
-- `Sidebar` renders chat creation and switching
-- `ChatView` coordinates the main conversation view
-- `MessageList` and `MessageBubble` render user and assistant messages
+- `AppShell` handles the shared layout
+- `Sidebar` renders chat navigation plus rename and delete dialogs
+- `LibraryPage` renders summary cards, the files table, and destructive actions
+- `UploadDialog` handles file selection and per-file tags
+- `ChatView`, `MessageList`, and `MessageBubble` render the conversation
 - `SourcesPanel` shows retrieval metadata below assistant answers
-- `ChatInput` handles Enter-to-send and disabled/loading states
+- `ChatInput` handles message entry
 
 ## State Handling
 
-`useChatApp` keeps the frontend state intentionally lightweight:
+`useChatApp` now manages:
 
-- chat list
+- chats
 - active chat id
-- messages keyed by chat id
-- loading/sending state
-- current application error
+- messages by chat
+- library file list and summary
+- upload state
+- per-file action busy state
+- app and library errors
 
-The hook also persists the last active chat id in `localStorage` and uses optimistic message placeholders while the API request is in flight.
+The hook still persists the last active chat id in `localStorage` and still uses optimistic message placeholders while the message request is in flight.
+
+## Markdown Rendering
+
+Assistant messages are rendered as markdown rather than raw text.
+
+Supported markdown includes:
+
+- paragraphs
+- headings
+- bold and italic text
+- ordered and unordered lists
+- inline code
+- fenced code blocks
+- blockquotes
+- links
+- tables
+- horizontal rules
+
+### Safety
+
+- raw HTML is not enabled
+- output is sanitized with `rehype-sanitize`
+- the renderer avoids unsafe HTML injection paths by default
+
+### Styling
+
+- readable spacing between markdown blocks
+- dark surfaced code blocks
+- styled inline code
+- table borders
+- visible links
+- blockquote accents
 
 ## Local Run
 

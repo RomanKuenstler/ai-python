@@ -70,6 +70,10 @@ class Settings:
     extraction_strategy_version: int = _get_int("EXTRACTION_STRATEGY_VERSION", _get_int("PROCESSOR_VERSION", 2))
     log_level: str = os.getenv("LOG_LEVEL", "INFO")
     data_dir: str = os.getenv("DATA_DIR", "/app/data")
+    max_upload_files: int = _get_int("MAX_UPLOAD_FILES", 5)
+    allowed_upload_extensions: str = os.getenv("ALLOWED_UPLOAD_EXTENSIONS", ".txt,.md,.html,.htm,.pdf,.epub")
+    upload_max_file_size_mb: int = _get_int("UPLOAD_MAX_FILE_SIZE_MB", 50)
+    default_tag: str = os.getenv("DEFAULT_TAG", "default")
 
     @property
     def database_url(self) -> str:
@@ -95,6 +99,14 @@ class Settings:
             f"epub_fallback_scan_enabled={self.epub_fallback_scan_enabled}",
         ]
         return "|".join(parts)
+
+    @property
+    def allowed_upload_extension_set(self) -> set[str]:
+        return {
+            extension.strip().lower()
+            for extension in self.allowed_upload_extensions.split(",")
+            if extension.strip()
+        }
 
 
 def get_settings() -> Settings:

@@ -4,21 +4,24 @@ import { ChatView } from "../components/chat/ChatView";
 import { useChatApp } from "../hooks/useChatApp";
 
 export function ChatPage() {
-  const { chats, activeChatId, activeMessages, loadingMessages, sending, appError, createChat, selectChat, sendMessage } =
+  const { chats, activeChatId, activeMessages, loadingMessages, sending, appError, createChat, ensureChatLoaded, renameChat, deleteChat } =
     useChatApp();
 
   return (
     <AppShell
-      sidebar={<Sidebar chats={chats} activeChatId={activeChatId} onCreateChat={() => void createChat()} onSelectChat={(chatId) => void selectChat(chatId)} />}
-      content={
-        <ChatView
-          messages={activeMessages}
-          sending={sending}
-          loadingMessages={loadingMessages}
-          error={appError}
-          onSend={sendMessage}
+      sidebar={
+        <Sidebar
+          chats={chats}
+          activeChatId={activeChatId}
+          activeView="chat"
+          onCreateChat={() => void createChat()}
+          onOpenLibrary={() => undefined}
+          onSelectChat={(chatId) => void ensureChatLoaded(chatId)}
+          onRenameChat={(chatId, chatName) => void renameChat(chatId, chatName)}
+          onDeleteChat={(chatId) => void deleteChat(chatId)}
         />
       }
+      content={<ChatView messages={activeMessages} sending={sending} loadingMessages={loadingMessages} error={appError} onSend={async () => undefined} />}
     />
   );
 }
