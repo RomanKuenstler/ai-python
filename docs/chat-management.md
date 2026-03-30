@@ -5,6 +5,8 @@
 Each chat row now exposes a hover menu on the right side with:
 
 - `Rename`
+- `Archive`
+- `Download`
 - `Delete`
 
 The menu closes on outside click or `Escape`.
@@ -34,6 +36,20 @@ Delete removes:
 - the chat row
 - all messages for that chat
 - retrieval logs tied to that chat
+
+## Archive Flow
+
+1. Hover a chat in the sidebar.
+2. Open the `...` menu.
+3. Select `Archive`.
+4. The chat disappears from the main sidebar list and appears in Preferences > Archive.
+
+Archived chats retain:
+
+- chat metadata
+- message history
+- retrieval logs
+- attachment metadata
 
 ## Active Chat Fallback
 

@@ -11,16 +11,17 @@ type MessageBubbleProps = {
 
 export function MessageBubble({ message }: MessageBubbleProps) {
   const [sourcesOpen, setSourcesOpen] = useState(false);
+  const isAssistant = message.role === "assistant";
 
   return (
     <article className={`message-bubble ${message.role}`}>
       <div className="message-meta">
-        <span>{message.role === "user" ? "You" : "Assistant"}</span>
+        <span>{isAssistant ? "Assistant" : "You"}</span>
         {message.status === "pending" ? <span className="message-status">Working...</span> : null}
         {message.status === "error" ? <span className="message-status error">Error</span> : null}
       </div>
       <div className="message-content">
-        {message.role === "assistant" ? (
+        {isAssistant ? (
           <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeSanitize]}>
             {message.content}
           </ReactMarkdown>
@@ -31,13 +32,13 @@ export function MessageBubble({ message }: MessageBubbleProps) {
       {message.attachments.length > 0 ? (
         <div className="message-attachments">
           {message.attachments.map((attachment) => (
-            <span key={`${message.id}-${attachment.file_name}`} className="message-attachment-pill">
+            <span key={`${message.id}-${attachment.file_name}`} className="message-attachment-pill composer-attachment-chip">
               {attachment.file_name}
             </span>
           ))}
         </div>
       ) : null}
-      {message.role === "assistant" && message.sources.length > 0 ? (
+      {isAssistant && message.sources.length > 0 ? (
         <div className="sources-wrap">
           <button className="sources-button" type="button" onClick={() => setSourcesOpen((current) => !current)}>
             Sources

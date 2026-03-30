@@ -1,6 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
 import { apiClient } from "../api/client";
-import type { AttachmentMeta, Chat, LibraryFile, LibraryResponse, Message } from "../types/chat";
+import type {
+  AssistantMode,
+  AttachmentMeta,
+  Chat,
+  LibraryFile,
+  LibraryResponse,
+  Message,
+  Settings,
+  SettingsUpdate,
+} from "../types/chat";
 
 const ACTIVE_CHAT_STORAGE_KEY = "local-rag-active-chat";
 
@@ -27,9 +36,24 @@ function createOptimisticMessage(
   };
 }
 
+function sortChats(chats: Chat[]) {
+  return [...chats].sort((left, right) => right.updated_at.localeCompare(left.updated_at));
+}
+
+function triggerJsonDownload(fileName: string, data: unknown) {
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = fileName;
+  anchor.click();
+  URL.revokeObjectURL(url);
+}
+
 export function useChatApp() {
   const [bootstrapping, setBootstrapping] = useState(true);
   const [chats, setChats] = useState<Chat[]>([]);
+  const [archivedChats, setArchivedChats] = useState<Chat[]>([]);
   const [messagesByChat, setMessagesByChat] = useState<Record<string, Message[]>>({});
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
   const [loadingMessages, setLoadingMessages] = useState(false);
@@ -40,6 +64,13 @@ export function useChatApp() {
   const [libraryError, setLibraryError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [busyFileIds, setBusyFileIds] = useState<number[]>([]);
+  const [assistantMode, setAssistantMode] = useState<AssistantMode>("simple");
+  const [settings, setSettings] = useState<Settings | null>(null);
+  const [settingsDraft, setSettingsDraft] = useState<SettingsUpdate | null>(null);
+  const [settingsLoading, setSettingsLoading] = useState(false);
+  const [settingsSaving, setSettingsSaving] = useState(false);
+  const [settingsError, setSettingsError] = useState<string | null>(null);
+  const [settingsSuccess, setSettingsSuccess] = useState<string | null>(null);
 
   useEffect(() => {
     void bootstrap();
@@ -49,14 +80,28 @@ export function useChatApp() {
     setBootstrapping(true);
     setAppError(null);
     try {
-      const chatList = await apiClient.listChats();
+      const [chatList, archivedList, runtimeSettings] = await Promise.all([
+        apiClient.listChats(),
+        apiClient.listArchivedChats(),
+        apiClient.getSettings(),
+      ]);
+      setChats(sortChats(chatList));
+      setArchivedChats(sortChats(archivedList));
+      setSettings(runtimeSettings);
+      setSettingsDraft({
+        chat_history_messages_count: runtimeSettings.chat_history_messages_count,
+        max_similarities: runtimeSettings.max_similarities,
+        min_similarities: runtimeSettings.min_similarities,
+        similarity_score_threshold: runtimeSettings.similarity_score_threshold,
+      });
+      setAssistantMode(runtimeSettings.default_assistant_mode);
+
       if (chatList.length === 0) {
         const created = await apiClient.createChat();
         setChats([created]);
         setActiveChatInternal(created.id);
         setMessagesByChat({ [created.id]: [] });
       } else {
-        setChats(chatList);
         const persistedChatId = window.localStorage.getItem(ACTIVE_CHAT_STORAGE_KEY);
         const nextChatId = chatList.some((chat) => chat.id === persistedChatId) ? persistedChatId : chatList[0].id;
         setActiveChatInternal(nextChatId);
@@ -72,7 +117,9 @@ export function useChatApp() {
     setActiveChatId(chatId);
     if (chatId) {
       window.localStorage.setItem(ACTIVE_CHAT_STORAGE_KEY, chatId);
+      return;
     }
+    window.localStorage.removeItem(ACTIVE_CHAT_STORAGE_KEY);
   }
 
   async function ensureChatLoaded(chatId: string) {
@@ -96,7 +143,7 @@ export function useChatApp() {
   async function createChat() {
     setAppError(null);
     const chat = await apiClient.createChat();
-    setChats((current) => [chat, ...current]);
+    setChats((current) => sortChats([chat, ...current]));
     setMessagesByChat((current) => ({ ...current, [chat.id]: [] }));
     setActiveChatInternal(chat.id);
     return chat;
@@ -104,17 +151,42 @@ export function useChatApp() {
 
   async function renameChat(chatId: string, chatName: string) {
     const updated = await apiClient.renameChat(chatId, { chat_name: chatName });
-    setChats((current) =>
-      current
-        .map((chat) => (chat.id === chatId ? updated : chat))
-        .sort((left, right) => right.updated_at.localeCompare(left.updated_at)),
-    );
+    setChats((current) => sortChats(current.map((chat) => (chat.id === chatId ? updated : chat))));
+    setArchivedChats((current) => sortChats(current.map((chat) => (chat.id === chatId ? updated : chat))));
     return updated;
+  }
+
+  async function archiveChat(chatId: string) {
+    const archived = await apiClient.archiveChat(chatId);
+    setChats((current) => current.filter((chat) => chat.id !== chatId));
+    setArchivedChats((current) => sortChats([archived, ...current.filter((chat) => chat.id !== chatId)]));
+
+    const remaining = chats.filter((chat) => chat.id !== chatId);
+    if (activeChatId === chatId) {
+      if (remaining.length > 0) {
+        setActiveChatInternal(remaining[0].id);
+        return remaining[0].id;
+      }
+      const created = await apiClient.createChat();
+      setChats([created]);
+      setMessagesByChat((current) => ({ ...current, [created.id]: [] }));
+      setActiveChatInternal(created.id);
+      return created.id;
+    }
+    return activeChatId;
+  }
+
+  async function unarchiveChat(chatId: string) {
+    const restored = await apiClient.unarchiveChat(chatId);
+    setArchivedChats((current) => current.filter((chat) => chat.id !== chatId));
+    setChats((current) => sortChats([restored, ...current.filter((chat) => chat.id !== chatId)]));
+    return restored;
   }
 
   async function deleteChat(chatId: string) {
     await apiClient.deleteChat(chatId);
     setChats((current) => current.filter((chat) => chat.id !== chatId));
+    setArchivedChats((current) => current.filter((chat) => chat.id !== chatId));
     setMessagesByChat((current) => {
       const next = { ...current };
       delete next[chatId];
@@ -122,20 +194,30 @@ export function useChatApp() {
     });
 
     const remaining = chats.filter((chat) => chat.id !== chatId);
-    if (remaining.length > 0) {
-      const nextActive = remaining[0].id;
-      setActiveChatInternal(nextActive);
-      return nextActive;
+    if (activeChatId === chatId) {
+      if (remaining.length > 0) {
+        const nextActive = remaining[0].id;
+        setActiveChatInternal(nextActive);
+        return nextActive;
+      }
+
+      const created = await apiClient.createChat();
+      setChats([created]);
+      setMessagesByChat({ [created.id]: [] });
+      setActiveChatInternal(created.id);
+      return created.id;
     }
 
-    const created = await apiClient.createChat();
-    setChats([created]);
-    setMessagesByChat({ [created.id]: [] });
-    setActiveChatInternal(created.id);
-    return created.id;
+    return activeChatId ?? remaining[0]?.id ?? null;
   }
 
-  async function sendMessage(content: string, attachments: File[] = []) {
+  async function downloadChat(chatId: string) {
+    const payload = await apiClient.downloadChat(chatId);
+    const safeName = payload.chat_name.replace(/[^a-z0-9-_]+/gi, "_").replace(/^_+|_+$/g, "") || "chat";
+    triggerJsonDownload(`${safeName}-${payload.chat_id}.json`, payload);
+  }
+
+  async function sendMessage(content: string, attachments: File[] = [], mode: AssistantMode = assistantMode) {
     if (!activeChatId || !content.trim() || sending) {
       return;
     }
@@ -148,7 +230,7 @@ export function useChatApp() {
       quality: {},
     }));
     const optimisticUser = createOptimisticMessage(chatId, "user", content, "completed", optimisticAttachments);
-    const optimisticAssistant = createOptimisticMessage(chatId, "assistant", "Thinking...", "pending");
+    const optimisticAssistant = createOptimisticMessage(chatId, "assistant", mode === "refine" ? "Refining answer..." : "Thinking...", "pending");
 
     setSending(true);
     setAppError(null);
@@ -158,7 +240,7 @@ export function useChatApp() {
     }));
 
     try {
-      const response = await apiClient.sendMessage(chatId, content, attachments);
+      const response = await apiClient.sendMessage(chatId, content, attachments, mode);
       setMessagesByChat((current) => ({
         ...current,
         [chatId]: [
@@ -171,9 +253,7 @@ export function useChatApp() {
         ],
       }));
       setChats((current) =>
-        current
-          .map((chat) => (chat.id === chatId ? { ...chat, updated_at: new Date().toISOString() } : chat))
-          .sort((left, right) => right.updated_at.localeCompare(left.updated_at)),
+        sortChats(current.map((chat) => (chat.id === chatId ? { ...chat, updated_at: new Date().toISOString() } : chat))),
       );
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Failed to send message";
@@ -192,6 +272,59 @@ export function useChatApp() {
       setAppError(errorMessage);
     } finally {
       setSending(false);
+    }
+  }
+
+  async function loadSettings() {
+    setSettingsLoading(true);
+    setSettingsError(null);
+    try {
+      const runtimeSettings = await apiClient.getSettings();
+      setSettings(runtimeSettings);
+      setSettingsDraft({
+        chat_history_messages_count: runtimeSettings.chat_history_messages_count,
+        max_similarities: runtimeSettings.max_similarities,
+        min_similarities: runtimeSettings.min_similarities,
+        similarity_score_threshold: runtimeSettings.similarity_score_threshold,
+      });
+      setAssistantMode((current) => (runtimeSettings.available_assistant_modes.includes(current) ? current : runtimeSettings.default_assistant_mode));
+    } catch (error) {
+      setSettingsError(error instanceof Error ? error.message : "Failed to load settings");
+    } finally {
+      setSettingsLoading(false);
+    }
+  }
+
+  function updateSettingsDraft(patch: Partial<SettingsUpdate>) {
+    setSettingsDraft((current) => (current ? { ...current, ...patch } : current));
+    setSettingsSuccess(null);
+  }
+
+  async function saveSettings() {
+    if (!settingsDraft) {
+      return null;
+    }
+
+    setSettingsSaving(true);
+    setSettingsError(null);
+    setSettingsSuccess(null);
+    try {
+      const updated = await apiClient.updateSettings(settingsDraft);
+      setSettings(updated);
+      setSettingsDraft({
+        chat_history_messages_count: updated.chat_history_messages_count,
+        max_similarities: updated.max_similarities,
+        min_similarities: updated.min_similarities,
+        similarity_score_threshold: updated.similarity_score_threshold,
+      });
+      setSettingsSuccess("Settings saved and applied live.");
+      return updated;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to save settings";
+      setSettingsError(message);
+      return null;
+    } finally {
+      setSettingsSaving(false);
     }
   }
 
@@ -262,6 +395,7 @@ export function useChatApp() {
   return {
     bootstrapping,
     chats,
+    archivedChats,
     activeChatId,
     activeMessages,
     loadingMessages,
@@ -272,6 +406,13 @@ export function useChatApp() {
     libraryError,
     uploading,
     busyFileIds,
+    assistantMode,
+    settings,
+    settingsDraft,
+    settingsLoading,
+    settingsSaving,
+    settingsError,
+    settingsSuccess,
     attachmentRules: {
       maxFiles: ATTACHMENT_MAX_FILES,
       allowedExtensions: ATTACHMENT_ALLOWED_EXTENSIONS,
@@ -280,8 +421,15 @@ export function useChatApp() {
     ensureChatLoaded,
     createChat,
     renameChat,
+    archiveChat,
+    unarchiveChat,
     deleteChat,
+    downloadChat,
     sendMessage,
+    setAssistantMode,
+    loadSettings,
+    updateSettingsDraft,
+    saveSettings,
     loadLibrary,
     toggleLibraryFile,
     deleteLibraryFile,

@@ -13,7 +13,11 @@ Creates a new chat with a generated placeholder name.
 
 ### `GET /api/chats`
 
-Returns chats ordered by most recently updated first.
+Returns non-archived chats ordered by most recently updated first.
+
+### `GET /api/chats/archived`
+
+Returns archived chats ordered by most recently updated first.
 
 ### `GET /api/chats/{chat_id}`
 
@@ -26,6 +30,18 @@ Renames a chat.
 ### `DELETE /api/chats/{chat_id}`
 
 Deletes the chat, messages, attachment metadata, and retrieval logs.
+
+### `PATCH /api/chats/{chat_id}/archive`
+
+Sets `is_archived=true` for the chat.
+
+### `PATCH /api/chats/{chat_id}/unarchive`
+
+Sets `is_archived=false` for the chat.
+
+### `GET /api/chats/{chat_id}/download`
+
+Returns a JSON export payload and includes a download filename in `Content-Disposition`.
 
 ### `GET /api/chats/{chat_id}/messages`
 
@@ -43,13 +59,15 @@ JSON request:
 
 ```json
 {
-  "message": "What does the Docker book say about volumes?"
+  "message": "What does the Docker book say about volumes?",
+  "assistant_mode": "simple"
 }
 ```
 
 Multipart request:
 
 - `message`: text field
+- `assistant_mode`: `simple` or `refine`
 - `files`: up to 3 file parts
 
 Response:
@@ -88,6 +106,7 @@ Response:
     "sources": [],
     "attachments": []
   },
+  "assistant_mode": "simple",
   "sources": [],
   "attachments_used": [
     {
@@ -99,6 +118,27 @@ Response:
       }
     }
   ]
+}
+```
+
+## Settings
+
+### `GET /api/settings`
+
+Returns live retriever settings and available assistant modes.
+
+### `PATCH /api/settings`
+
+Updates retriever settings immediately and persists them.
+
+Request:
+
+```json
+{
+  "chat_history_messages_count": 5,
+  "max_similarities": 8,
+  "min_similarities": 2,
+  "similarity_score_threshold": 0.7
 }
 ```
 

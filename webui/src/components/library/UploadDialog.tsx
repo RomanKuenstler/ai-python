@@ -82,21 +82,21 @@ export function UploadDialog({ allowedExtensions, defaultTag, maxFiles, uploadin
         </>
       }
     >
-      <div className="upload-dialog-body">
+      <div className="upload-dialog-body library-upload-modal">
         {files.length === 0 ? (
-          <button className="upload-picker-button" type="button" onClick={() => inputRef.current?.click()} disabled={uploading}>
+          <button className="upload-picker-button library-upload-add" type="button" onClick={() => inputRef.current?.click()} disabled={uploading}>
             + Add files
           </button>
         ) : (
-          <div className="upload-file-list">
+          <div className="upload-file-list library-upload-list">
             {files.map((file) => (
-              <div key={file.name} className="upload-file-row">
+              <div key={file.name} className="upload-file-row library-upload-row">
                 <div>
-                  <strong>{file.name}</strong>
+                  <strong className="library-upload-name">{file.name}</strong>
                   <p>{file.size.toLocaleString()} bytes</p>
                 </div>
                 <input
-                  className="dialog-input"
+                  className="dialog-input library-upload-tags-input"
                   type="text"
                   placeholder={`Tags (comma separated, default: ${defaultTag})`}
                   value={tagsByFile[file.name] ?? ""}
@@ -105,7 +105,7 @@ export function UploadDialog({ allowedExtensions, defaultTag, maxFiles, uploadin
                 />
               </div>
             ))}
-            <button className="secondary-button" type="button" onClick={() => inputRef.current?.click()} disabled={uploading}>
+            <button className="secondary-button library-upload-add" type="button" onClick={() => inputRef.current?.click()} disabled={uploading}>
               + Add files
             </button>
           </div>

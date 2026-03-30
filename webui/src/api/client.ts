@@ -1,11 +1,15 @@
 import type {
+  AssistantMode,
   Chat,
+  ChatDownload,
   ChatUpdate,
   LibraryFile,
   LibraryResponse,
   LibraryUploadResponse,
   Message,
   MessageResponse,
+  Settings,
+  SettingsUpdate,
 } from "../types/chat";
 
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/$/, "") ?? "http://localhost:8000";
@@ -37,32 +41,54 @@ export const apiClient = {
   listChats() {
     return request<Chat[]>("/api/chats");
   },
+  listArchivedChats() {
+    return request<Chat[]>("/api/chats/archived");
+  },
   renameChat(chatId: string, payload: ChatUpdate) {
     return request<Chat>(`/api/chats/${chatId}`, {
       method: "PATCH",
       body: JSON.stringify(payload),
     });
   },
+  archiveChat(chatId: string) {
+    return request<Chat>(`/api/chats/${chatId}/archive`, { method: "PATCH" });
+  },
+  unarchiveChat(chatId: string) {
+    return request<Chat>(`/api/chats/${chatId}/unarchive`, { method: "PATCH" });
+  },
   deleteChat(chatId: string) {
     return request<Chat>(`/api/chats/${chatId}`, { method: "DELETE" });
+  },
+  downloadChat(chatId: string) {
+    return request<ChatDownload>(`/api/chats/${chatId}/download`);
   },
   getMessages(chatId: string) {
     return request<Message[]>(`/api/chats/${chatId}/messages`);
   },
-  sendMessage(chatId: string, message: string, attachments: File[]) {
+  sendMessage(chatId: string, message: string, attachments: File[], assistantMode: AssistantMode) {
     if (attachments.length === 0) {
       return request<MessageResponse>(`/api/chats/${chatId}/messages`, {
         method: "POST",
-        body: JSON.stringify({ message }),
+        body: JSON.stringify({ message, assistant_mode: assistantMode }),
       });
     }
 
     const formData = new FormData();
     formData.append("message", message);
+    formData.append("assistant_mode", assistantMode);
     attachments.forEach((file) => formData.append("files", file));
     return request<MessageResponse>(`/api/chats/${chatId}/messages`, {
       method: "POST",
       body: formData,
+    });
+  },
+  getSettings() {
+    return request<Settings>("/api/settings");
+  },
+  updateSettings(payload: SettingsUpdate) {
+    return request<Settings>("/api/settings", {
+      method: "PATCH",
+      body: JSON.stringify(payload),
     });
   },
   listLibraryFiles() {

@@ -13,7 +13,7 @@ class ChatCreateResponse(BaseModel):
 
 
 class ChatRead(ChatCreateResponse):
-    pass
+    is_archived: bool = False
 
 
 class ChatUpdateRequest(BaseModel):
@@ -46,6 +46,7 @@ class MessageRead(BaseModel):
 
 class MessageCreateRequest(BaseModel):
     message: str = Field(min_length=1)
+    assistant_mode: str | None = None
 
 
 class AttachmentRead(BaseModel):
@@ -59,8 +60,42 @@ class MessageCreateResponse(BaseModel):
     chat_id: str
     user_message: MessageRead
     assistant_message: MessageRead
+    assistant_mode: str
     sources: list[SourceRead] = Field(default_factory=list)
     attachments_used: list[AttachmentRead] = Field(default_factory=list)
+
+
+class SettingsRead(BaseModel):
+    chat_history_messages_count: int
+    max_similarities: int
+    min_similarities: int
+    similarity_score_threshold: float
+    default_assistant_mode: str
+    available_assistant_modes: list[str] = Field(default_factory=list)
+
+
+class SettingsUpdateRequest(BaseModel):
+    chat_history_messages_count: int = Field(ge=1, le=50)
+    max_similarities: int = Field(ge=1, le=50)
+    min_similarities: int = Field(ge=1, le=50)
+    similarity_score_threshold: float = Field(ge=0.0, le=1.0)
+
+
+class ChatDownloadMessageRead(BaseModel):
+    role: str
+    content: str
+    created_at: datetime
+    sources: list[SourceRead] = Field(default_factory=list)
+    attachments: list[AttachmentRead] = Field(default_factory=list)
+
+
+class ChatDownloadResponse(BaseModel):
+    chat_id: str
+    chat_name: str
+    is_archived: bool = False
+    created_at: datetime
+    updated_at: datetime
+    messages: list[ChatDownloadMessageRead] = Field(default_factory=list)
 
 
 class LibraryFileRead(BaseModel):

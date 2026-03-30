@@ -41,7 +41,12 @@ def main() -> None:
         min_results=settings.retrieval_min_results,
         max_results=settings.retrieval_max_results,
     )
-    llm_client = LlmClient(model=settings.llm_model, base_url=settings.llm_base_url, api_key=settings.llm_api_key)
+    llm_client = LlmClient(
+        model=settings.llm_model,
+        base_url=settings.llm_base_url,
+        api_key=settings.llm_api_key,
+        timeout=settings.llm_timeout_seconds,
+    )
     prompt_builder = PromptBuilder(prompts_dir)
     history_service = ChatHistoryService(postgres_client, settings.history_limit)
 
@@ -60,7 +65,7 @@ def main() -> None:
         user_message = postgres_client.add_chat_message(session_id, "user", user_input)
         history = history_service.fetch(session_id, exclude_message_id=user_message.id)
         retrieved_chunks = retrieval_service.retrieve(user_input)
-        messages = prompt_builder.build_messages(user_message=user_input, history=history, retrieved_chunks=retrieved_chunks)
+        messages = prompt_builder.build_simple_messages(user_message=user_input, history=history, retrieved_chunks=retrieved_chunks)
         response = llm_client.invoke(messages)
         assistant_message = postgres_client.add_chat_message(session_id, "assistant", response)
         postgres_client.add_retrieval_logs(

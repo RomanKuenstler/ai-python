@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -16,9 +17,17 @@ from services.retriever.prompt_builder import PromptBuilder
 from services.retriever.qdrant_client import RetrieverQdrantClient
 from services.retriever.repositories.chat_repository import ChatRepository
 from services.retriever.retriever import RetrievalService
+from services.retriever.schemas.chat import ChatDownloadMessageRead, ChatDownloadResponse, SettingsRead, SettingsUpdateRequest
 from services.retriever.services.chat_naming import generate_chat_name
 from services.retriever.services.library_manager import LibraryManager, UploadFilePayload
 from services.retriever.services.message_mapper import map_attachment, map_chat, map_message, map_source
+
+RUNTIME_SETTING_KEYS = {
+    "chat_history_messages_count",
+    "max_similarities",
+    "min_similarities",
+    "similarity_score_threshold",
+}
 
 
 @dataclass(slots=True)
@@ -43,13 +52,17 @@ class RetrieverAppService:
         self.library_manager = deps.library_manager
         self.attachment_client = deps.attachment_client
         self.settings = deps.settings
+        self._load_runtime_settings()
 
     def create_chat(self):
         chat = self.chat_repository.create_chat(generate_chat_name())
         return map_chat(chat)
 
     def list_chats(self):
-        return [map_chat(chat) for chat in self.chat_repository.list_chats()]
+        return [map_chat(chat) for chat in self.chat_repository.list_chats(archived=False)]
+
+    def list_archived_chats(self):
+        return [map_chat(chat) for chat in self.chat_repository.list_chats(archived=True)]
 
     def get_chat(self, chat_id: str):
         chat = self.chat_repository.get_chat(chat_id)
@@ -85,6 +98,47 @@ class RetrieverAppService:
             return None
         return map_chat(chat)
 
+    def archive_chat(self, chat_id: str):
+        chat = self.chat_repository.set_chat_archived(chat_id, True)
+        if chat is None:
+            return None
+        return map_chat(chat)
+
+    def unarchive_chat(self, chat_id: str):
+        chat = self.chat_repository.set_chat_archived(chat_id, False)
+        if chat is None:
+            return None
+        return map_chat(chat)
+
+    def download_chat(self, chat_id: str):
+        chat = self.chat_repository.get_chat(chat_id)
+        if chat is None:
+            return None
+
+        messages = self.chat_repository.list_messages(chat_id)
+        assistant_ids = [message.id for message in messages if message.role == "assistant"]
+        message_ids = [message.id for message in messages]
+        sources_by_message = self.chat_repository.get_sources_by_assistant_message(assistant_ids)
+        attachments_by_message = self.chat_repository.get_attachments_by_message_ids(message_ids)
+
+        return ChatDownloadResponse(
+            chat_id=chat.id,
+            chat_name=chat.chat_name,
+            is_archived=chat.is_archived,
+            created_at=chat.created_at,
+            updated_at=chat.updated_at,
+            messages=[
+                ChatDownloadMessageRead(
+                    role=message.role,
+                    content=message.content,
+                    created_at=message.created_at,
+                    sources=[map_source(log) for log in sources_by_message.get(message.id, [])],
+                    attachments=[map_attachment(item) for item in attachments_by_message.get(message.id, [])],
+                )
+                for message in messages
+            ],
+        )
+
     def list_library_files(self):
         return self.library_manager.list_files()
 
@@ -99,11 +153,47 @@ class RetrieverAppService:
         files = self.library_manager.upload_files(uploads, tags_by_file)
         return {"files": files}
 
-    def send_message(self, chat_id: str, user_content: str, attachments: list[tuple[str, bytes]] | None = None):
+    def get_settings(self) -> SettingsRead:
+        return SettingsRead(
+            chat_history_messages_count=self.history_service.history_limit,
+            max_similarities=self.retrieval_service.max_results,
+            min_similarities=self.retrieval_service.min_results,
+            similarity_score_threshold=self.retrieval_service.score_threshold,
+            default_assistant_mode=self.settings.default_assistant_mode,
+            available_assistant_modes=self.settings.available_assistant_modes,
+        )
+
+    def update_settings(self, payload: SettingsUpdateRequest) -> SettingsRead:
+        if payload.min_similarities > payload.max_similarities:
+            raise ValueError("min similarities cannot be greater than max similarities")
+
+        self.history_service.history_limit = payload.chat_history_messages_count
+        self.retrieval_service.max_results = payload.max_similarities
+        self.retrieval_service.min_results = payload.min_similarities
+        self.retrieval_service.score_threshold = payload.similarity_score_threshold
+
+        persisted_values = {
+            "chat_history_messages_count": payload.chat_history_messages_count,
+            "max_similarities": payload.max_similarities,
+            "min_similarities": payload.min_similarities,
+            "similarity_score_threshold": payload.similarity_score_threshold,
+        }
+        for key, value in persisted_values.items():
+            self.chat_repository.upsert_setting(key, json.dumps(value))
+        return self.get_settings()
+
+    def send_message(
+        self,
+        chat_id: str,
+        user_content: str,
+        attachments: list[tuple[str, bytes]] | None = None,
+        assistant_mode: str | None = None,
+    ):
         chat = self.chat_repository.get_chat(chat_id)
         if chat is None:
             return None
 
+        resolved_mode = self._resolve_assistant_mode(assistant_mode)
         processed_attachments = self._process_attachments(attachments or [])
         user_message = self.chat_repository.create_message(
             chat_id,
@@ -115,14 +205,13 @@ class RetrieverAppService:
             self.chat_repository.add_message_attachments(user_message.id, processed_attachments)
         history = self.history_service.fetch(chat_id, exclude_message_id=user_message.id)
         retrieved_chunks = self.retrieval_service.retrieve(user_content)
-        prompt_messages = self.prompt_builder.build_messages(
-            user_message=user_content,
+        response = self._generate_response(
+            assistant_mode=resolved_mode,
+            user_content=user_content,
             history=history,
             retrieved_chunks=retrieved_chunks,
-            attachments=processed_attachments,
-            attachment_char_limit=self.settings.attachment_max_total_chars,
+            processed_attachments=processed_attachments,
         )
-        response = self.llm_client.invoke(prompt_messages)
         assistant_message = self.chat_repository.create_message(chat_id, "assistant", response)
         self.chat_repository.create_retrieval_logs(
             assistant_message_id=assistant_message.id,
@@ -137,6 +226,7 @@ class RetrieverAppService:
                 update={"attachments": [map_attachment(item) for item in processed_attachments]}
             ),
             "assistant_message": map_message(assistant_message),
+            "assistant_mode": resolved_mode,
             "sources": [map_source_from_chunk(chunk) for chunk in retrieved_chunks],
             "attachments_used": [map_attachment(item) for item in processed_attachments],
         }
@@ -156,6 +246,64 @@ class RetrieverAppService:
 
         processed = self.attachment_client.process_files(validated)
         return [attachment for attachment in processed if str(attachment.get("content") or "").strip()]
+
+    def _generate_response(
+        self,
+        *,
+        assistant_mode: str,
+        user_content: str,
+        history: list[tuple[str, str]],
+        retrieved_chunks: list[dict[str, str | float | list[str] | None]],
+        processed_attachments: list[dict[str, object]],
+    ) -> str:
+        common_kwargs = {
+            "user_message": user_content,
+            "history": history,
+            "retrieved_chunks": retrieved_chunks,
+            "attachments": processed_attachments,
+            "attachment_char_limit": self.settings.attachment_max_total_chars,
+        }
+        if assistant_mode == "refine":
+            draft = self.llm_client.invoke(self.prompt_builder.build_refine_draft_messages(**common_kwargs))
+            return self.llm_client.invoke(
+                self.prompt_builder.build_refine_final_messages(draft_answer=draft, **common_kwargs)
+            )
+        return self.llm_client.invoke(self.prompt_builder.build_simple_messages(**common_kwargs))
+
+    def _resolve_assistant_mode(self, assistant_mode: str | None) -> str:
+        mode = (assistant_mode or self.settings.default_assistant_mode).strip().lower()
+        if not mode:
+            mode = "simple"
+        if mode not in self.settings.available_assistant_modes:
+            raise ValueError(f"Unsupported assistant mode: {mode}")
+        return mode
+
+    def _load_runtime_settings(self) -> None:
+        stored_values: dict[str, object] = {}
+        for record in self.chat_repository.list_settings():
+            if record.key not in RUNTIME_SETTING_KEYS:
+                continue
+            try:
+                stored_values[record.key] = json.loads(record.value)
+            except json.JSONDecodeError:
+                continue
+
+        self.history_service.history_limit = max(
+            1,
+            int(stored_values.get("chat_history_messages_count", self.history_service.history_limit)),
+        )
+        self.retrieval_service.min_results = max(
+            1,
+            int(stored_values.get("min_similarities", self.retrieval_service.min_results)),
+        )
+        self.retrieval_service.max_results = max(
+            self.retrieval_service.min_results,
+            int(stored_values.get("max_similarities", self.retrieval_service.max_results)),
+        )
+        self.retrieval_service.score_threshold = min(
+            max(float(stored_values.get("similarity_score_threshold", self.retrieval_service.score_threshold)), 0.0),
+            1.0,
+        )
 
 
 def build_retriever_app_service(
@@ -216,7 +364,12 @@ def build_retriever_app_service(
             enabled_file_paths_lookup=postgres_client.enabled_file_paths_for_candidates,
         ),
         prompt_builder=PromptBuilder(prompts_dir),
-        llm_client=LlmClient(model=llm_model, base_url=llm_base_url, api_key=llm_api_key),
+        llm_client=LlmClient(
+            model=llm_model,
+            base_url=llm_base_url,
+            api_key=llm_api_key,
+            timeout=settings.llm_timeout_seconds,
+        ),
         library_manager=LibraryManager(data_dir=data_dir, processor=library_processor, settings=settings),
         attachment_client=AttachmentProcessingClient(settings.embedder_service_url),
         settings=settings,

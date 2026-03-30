@@ -8,11 +8,71 @@ class PromptBuilder:
         self.prompts_dir = prompts_dir
         self.guardrails = (prompts_dir / "guardrails.md").read_text(encoding="utf-8").strip()
         self.assistant = (prompts_dir / "assistant.md").read_text(encoding="utf-8").strip()
+        self.assistant_refine_draft = (prompts_dir / "assistant-refine-draft.md").read_text(encoding="utf-8").strip()
+        self.assistant_refine_refining = (prompts_dir / "assistant-refine-refining.md").read_text(encoding="utf-8").strip()
         self.rag_template = (prompts_dir / "ragcontext.md").read_text(encoding="utf-8").strip()
 
-    def build_messages(
+    def build_simple_messages(
         self,
         *,
+        user_message: str,
+        history: list[tuple[str, str]],
+        retrieved_chunks: list[dict[str, str | float | list[str]]],
+        attachments: list[dict[str, object]] | None = None,
+        attachment_char_limit: int = 15000,
+    ) -> list[tuple[str, str]]:
+        return self._build_messages(
+            assistant_prompt=self.assistant,
+            user_message=user_message,
+            history=history,
+            retrieved_chunks=retrieved_chunks,
+            attachments=attachments,
+            attachment_char_limit=attachment_char_limit,
+        )
+
+    def build_refine_draft_messages(
+        self,
+        *,
+        user_message: str,
+        history: list[tuple[str, str]],
+        retrieved_chunks: list[dict[str, str | float | list[str]]],
+        attachments: list[dict[str, object]] | None = None,
+        attachment_char_limit: int = 15000,
+    ) -> list[tuple[str, str]]:
+        return self._build_messages(
+            assistant_prompt=self.assistant_refine_draft,
+            user_message=user_message,
+            history=history,
+            retrieved_chunks=retrieved_chunks,
+            attachments=attachments,
+            attachment_char_limit=attachment_char_limit,
+        )
+
+    def build_refine_final_messages(
+        self,
+        *,
+        user_message: str,
+        history: list[tuple[str, str]],
+        retrieved_chunks: list[dict[str, str | float | list[str]]],
+        draft_answer: str,
+        attachments: list[dict[str, object]] | None = None,
+        attachment_char_limit: int = 15000,
+    ) -> list[tuple[str, str]]:
+        messages = self._build_messages(
+            assistant_prompt=self.assistant_refine_refining,
+            user_message=user_message,
+            history=history,
+            retrieved_chunks=retrieved_chunks,
+            attachments=attachments,
+            attachment_char_limit=attachment_char_limit,
+        )
+        messages.insert(2, ("system", f"[draft answer]\n{draft_answer.strip()}"))
+        return messages
+
+    def _build_messages(
+        self,
+        *,
+        assistant_prompt: str,
         user_message: str,
         history: list[tuple[str, str]],
         retrieved_chunks: list[dict[str, str | float | list[str]]],
@@ -45,7 +105,7 @@ class PromptBuilder:
         )
         messages: list[tuple[str, str]] = [
             ("system", self.guardrails),
-            ("system", self.assistant),
+            ("system", assistant_prompt),
             ("system", rag_context),
         ]
         messages.append(("system", self._build_attachment_context(attachments or [], attachment_char_limit)))

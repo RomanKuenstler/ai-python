@@ -10,7 +10,7 @@ T = TypeVar("T")
 LOGGER = logging.getLogger(__name__)
 
 
-def retry(operation: Callable[[], T], attempts: int = 3, delay_seconds: float = 1.0) -> T:
+def retry(operation: Callable[[], T], attempts: int = 10, delay_seconds: float = 1.0) -> T:
     last_error: Exception | None = None
     for attempt in range(1, attempts + 1):
         try:

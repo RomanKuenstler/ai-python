@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from services.common.models import ChatMessage, ChatSession, MessageAttachment, RetrievalLog
+from services.common.models import SettingRecord
 from services.retriever.postgres_client import RetrieverPostgresClient
 
 
@@ -14,8 +15,8 @@ class ChatRepository:
     def ensure_chat(self, chat_id: str, chat_name: str) -> ChatSession:
         return self.postgres_client.ensure_chat(chat_id, chat_name)
 
-    def list_chats(self) -> list[ChatSession]:
-        return self.postgres_client.list_chats()
+    def list_chats(self, *, archived: bool = False) -> list[ChatSession]:
+        return self.postgres_client.list_chats(archived=archived)
 
     def get_chat(self, chat_id: str) -> ChatSession | None:
         return self.postgres_client.get_chat(chat_id)
@@ -25,6 +26,9 @@ class ChatRepository:
 
     def delete_chat(self, chat_id: str) -> ChatSession | None:
         return self.postgres_client.delete_chat(chat_id)
+
+    def set_chat_archived(self, chat_id: str, is_archived: bool) -> ChatSession | None:
+        return self.postgres_client.set_chat_archived(chat_id, is_archived)
 
     def list_messages(self, chat_id: str) -> list[ChatMessage]:
         return self.postgres_client.get_chat_messages(chat_id)
@@ -75,3 +79,9 @@ class ChatRepository:
 
     def touch_chat(self, chat_id: str) -> None:
         self.postgres_client.touch_chat(chat_id)
+
+    def list_settings(self) -> list[SettingRecord]:
+        return self.postgres_client.list_settings()
+
+    def upsert_setting(self, key: str, value: str) -> SettingRecord:
+        return self.postgres_client.upsert_setting(key, value)

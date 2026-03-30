@@ -6,11 +6,13 @@ from services.retriever.api.app import create_app
 from services.retriever.api.dependencies import get_retriever_service
 from services.retriever.schemas.chat import (
     AttachmentRead,
+    ChatDownloadResponse,
     ChatRead,
     LibraryFileRead,
     LibraryListResponse,
     LibrarySummaryRead,
     MessageRead,
+    SettingsRead,
     SourceRead,
 )
 
@@ -20,6 +22,7 @@ class StubRetrieverService:
         return ChatRead(
             id="chat-1",
             chat_name="chat-abc123",
+            is_archived=False,
             created_at="2026-03-29T00:00:00Z",
             updated_at="2026-03-29T00:00:00Z",
         )
@@ -38,8 +41,42 @@ class StubRetrieverService:
         return ChatRead(
             id="chat-1",
             chat_name=chat_name,
+            is_archived=False,
             created_at="2026-03-29T00:00:00Z",
             updated_at="2026-03-29T00:00:02Z",
+        )
+
+    def list_archived_chats(self) -> list[ChatRead]:
+        return [
+            ChatRead(
+                id="chat-2",
+                chat_name="archived-chat",
+                is_archived=True,
+                created_at="2026-03-29T00:00:00Z",
+                updated_at="2026-03-29T00:00:03Z",
+            )
+        ]
+
+    def archive_chat(self, chat_id: str) -> ChatRead | None:
+        if chat_id != "chat-1":
+            return None
+        return ChatRead(
+            id="chat-1",
+            chat_name="chat-abc123",
+            is_archived=True,
+            created_at="2026-03-29T00:00:00Z",
+            updated_at="2026-03-29T00:00:03Z",
+        )
+
+    def unarchive_chat(self, chat_id: str) -> ChatRead | None:
+        if chat_id != "chat-2":
+            return None
+        return ChatRead(
+            id="chat-2",
+            chat_name="archived-chat",
+            is_archived=False,
+            created_at="2026-03-29T00:00:00Z",
+            updated_at="2026-03-29T00:00:04Z",
         )
 
     def delete_chat(self, chat_id: str) -> ChatRead | None:
@@ -76,7 +113,13 @@ class StubRetrieverService:
             )
         ]
 
-    def send_message(self, chat_id: str, user_content: str, attachments: list[tuple[str, bytes]] | None = None):
+    def send_message(
+        self,
+        chat_id: str,
+        user_content: str,
+        attachments: list[tuple[str, bytes]] | None = None,
+        assistant_mode: str | None = None,
+    ):
         if chat_id != "chat-1":
             return None
         attachment_payload = [
@@ -111,6 +154,7 @@ class StubRetrieverService:
                 sources=[],
                 attachments=[],
             ),
+            "assistant_mode": assistant_mode or "simple",
             "sources": [
                 SourceRead(
                     chunk_id="chunk-1",
@@ -126,6 +170,67 @@ class StubRetrieverService:
             ],
             "attachments_used": attachment_payload if attachments else [],
         }
+
+    def download_chat(self, chat_id: str) -> ChatDownloadResponse | None:
+        if chat_id != "chat-1":
+            return None
+        return ChatDownloadResponse(
+            chat_id="chat-1",
+            chat_name="chat-abc123",
+            is_archived=False,
+            created_at="2026-03-29T00:00:00Z",
+            updated_at="2026-03-29T00:00:01Z",
+            messages=[
+                {
+                    "role": "user",
+                    "content": "hello",
+                    "created_at": "2026-03-29T00:00:00Z",
+                    "sources": [],
+                    "attachments": [],
+                },
+                {
+                    "role": "assistant",
+                    "content": "Grounded answer",
+                    "created_at": "2026-03-29T00:00:01Z",
+                    "sources": [
+                        {
+                            "chunk_id": "chunk-1",
+                            "file_name": "manual.pdf",
+                            "file_path": "/app/data/manual.pdf",
+                            "title": "Storage",
+                            "chapter": "Chapter 4",
+                            "section": "Volumes",
+                            "page_number": 18,
+                            "score": 0.812,
+                            "tags": ["docker"],
+                        }
+                    ],
+                    "attachments": [],
+                },
+            ],
+        )
+
+    def get_settings(self) -> SettingsRead:
+        return SettingsRead(
+            chat_history_messages_count=5,
+            max_similarities=8,
+            min_similarities=2,
+            similarity_score_threshold=0.7,
+            default_assistant_mode="simple",
+            available_assistant_modes=["simple", "refine"],
+        )
+
+    def update_settings(self, payload) -> SettingsRead:
+        if payload.min_similarities > payload.max_similarities:
+            raise ValueError("min similarities cannot be greater than max similarities")
+        return SettingsRead(
+            chat_history_messages_count=payload.chat_history_messages_count,
+            max_similarities=payload.max_similarities,
+            min_similarities=payload.min_similarities,
+            similarity_score_threshold=payload.similarity_score_threshold,
+            default_assistant_mode="simple",
+            available_assistant_modes=["simple", "refine"],
+        )
 
     def list_library_files(self) -> LibraryListResponse:
         return LibraryListResponse(
@@ -197,13 +302,26 @@ def test_chat_endpoints() -> None:
     delete_response = client.delete("/api/chats/chat-1")
     assert delete_response.status_code == 200
 
+    archived_response = client.get("/api/chats/archived")
+    assert archived_response.status_code == 200
+    assert archived_response.json()[0]["is_archived"] is True
+
+    archive_response = client.patch("/api/chats/chat-1/archive")
+    assert archive_response.status_code == 200
+    assert archive_response.json()["is_archived"] is True
+
+    unarchive_response = client.patch("/api/chats/chat-2/unarchive")
+    assert unarchive_response.status_code == 200
+    assert unarchive_response.json()["is_archived"] is False
+
 
 def test_post_message_returns_sources() -> None:
     client = build_client()
-    response = client.post("/api/chats/chat-1/messages", json={"message": "hello"})
+    response = client.post("/api/chats/chat-1/messages", json={"message": "hello", "assistant_mode": "refine"})
     assert response.status_code == 200
     payload = response.json()
     assert payload["assistant_message"]["content"] == "Grounded answer"
+    assert payload["assistant_mode"] == "refine"
     assert payload["sources"][0]["file_name"] == "manual.pdf"
     assert payload["sources"][0]["section"] == "Volumes"
 
@@ -241,3 +359,28 @@ def test_library_endpoints() -> None:
 
     delete_response = client.delete("/api/library/files/1")
     assert delete_response.status_code == 200
+
+
+def test_download_and_settings_endpoints() -> None:
+    client = build_client()
+
+    download_response = client.get("/api/chats/chat-1/download")
+    assert download_response.status_code == 200
+    assert download_response.headers["content-disposition"].endswith('chat-abc123-chat-1.json"')
+    assert download_response.json()["messages"][1]["sources"][0]["file_name"] == "manual.pdf"
+
+    settings_response = client.get("/api/settings")
+    assert settings_response.status_code == 200
+    assert settings_response.json()["max_similarities"] == 8
+
+    patch_response = client.patch(
+        "/api/settings",
+        json={
+            "chat_history_messages_count": 6,
+            "max_similarities": 9,
+            "min_similarities": 3,
+            "similarity_score_threshold": 0.75,
+        },
+    )
+    assert patch_response.status_code == 200
+    assert patch_response.json()["similarity_score_threshold"] == 0.75

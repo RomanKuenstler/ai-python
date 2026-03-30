@@ -25,6 +25,23 @@ function formatBytes(sizeBytes: number) {
   return `${(sizeBytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+function extensionTone(extension: string) {
+  const normalized = extension.toLowerCase();
+  if (normalized === ".pdf") {
+    return "is-red";
+  }
+  if (normalized === ".html" || normalized === ".htm") {
+    return "is-blue";
+  }
+  if (normalized === ".epub") {
+    return "is-purple";
+  }
+  if (normalized === ".md" || normalized === ".txt") {
+    return "is-gray";
+  }
+  return "is-green";
+}
+
 export function LibraryPage({
   library,
   loading,
@@ -72,15 +89,17 @@ export function LibraryPage({
 
       <div className="library-table-card">
         <div className="library-table-header">
-          <button className="primary-button" type="button" onClick={() => setUploadOpen(true)}>
+          <button className="restart-button library-upload-button" type="button" onClick={() => setUploadOpen(true)}>
             Upload files
           </button>
           <button className="secondary-button" type="button" disabled>
             Bulk actions
           </button>
         </div>
-        <div className="library-table-shell">
+
+        <div className="library-table">
           {loading ? <div className="empty-state">Loading library...</div> : null}
+
           {!loading && library && library.files.length === 0 ? (
             <div className="empty-state">
               <div>
@@ -89,72 +108,80 @@ export function LibraryPage({
               </div>
             </div>
           ) : null}
+
           {!loading && library && library.files.length > 0 ? (
-            <div className="table-scroll">
-              <table className="library-table">
-                <thead>
-                  <tr>
-                    <th>Name</th>
-                    <th>Status</th>
-                    <th>Tags</th>
-                    <th>Size</th>
-                    <th>Chunks</th>
-                    <th>Extension</th>
-                    <th>Embedded</th>
-                    <th>Updated</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {library.files.map((file) => (
-                    <tr key={file.id}>
-                      <td>{file.file_name}</td>
-                      <td>
-                        <span className={`status-pill ${file.is_enabled ? "enabled" : "disabled"}`}>
-                          {file.is_enabled ? "Active" : "Disabled"}
-                        </span>
-                      </td>
-                      <td>
-                        <div className="tag-list">
-                          {file.tags.map((tag) => (
-                            <span key={tag} className="tag-pill">
-                              {tag}
-                            </span>
-                          ))}
-                        </div>
-                      </td>
-                      <td>{formatBytes(file.size_bytes)}</td>
-                      <td>{file.chunk_count}</td>
-                      <td>
-                        <span className={`extension-badge ${file.extension.replace(".", "")}`}>{file.extension || file.file_type}</span>
-                      </td>
-                      <td>{file.is_embedded ? "Yes" : "No"}</td>
-                      <td>{new Date(file.updated_at).toLocaleString()}</td>
-                      <td>
-                        <div className="row-actions">
-                          <button
-                            className="secondary-button"
-                            type="button"
-                            disabled={busySet.has(file.id)}
-                            onClick={() => onToggleFile(file)}
-                          >
-                            {file.is_enabled ? "Disable" : "Enable"}
-                          </button>
-                          <button
-                            className="danger-button"
-                            type="button"
-                            disabled={busySet.has(file.id)}
-                            onClick={() => setDeleteTarget(file)}
-                          >
-                            Delete
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <>
+              <div className="library-table-head">
+                <span>Name</span>
+                <span>Status</span>
+                <span>Tags</span>
+                <span>Size</span>
+                <span>Chunks</span>
+                <span>Type</span>
+                <span>Embedded</span>
+                <span>Updated</span>
+                <span>Actions</span>
+              </div>
+              <div className="library-table-body">
+                {library.files.map((file) => (
+                  <div key={file.id} className="library-table-row">
+                    <div className="library-path">{file.file_name}</div>
+                    <div className="library-status-cell">
+                      <span className={`status-pill ${file.is_enabled ? "enabled" : "disabled"}`}>
+                        {file.is_enabled ? "Active" : "Disabled"}
+                      </span>
+                    </div>
+                    <div className="library-tags-cell">
+                      {file.tags.length > 0 ? (
+                        file.tags.map((tag) => (
+                          <span key={`${file.id}-${tag}`} className="library-tag-line">
+                            {tag}
+                          </span>
+                        ))
+                      ) : (
+                        <span className="library-tag-line muted">No tags</span>
+                      )}
+                    </div>
+                    <div>{formatBytes(file.size_bytes)}</div>
+                    <div>{file.chunk_count}</div>
+                    <div>
+                      <span className={`library-extension-chip ${extensionTone(file.extension || file.file_type)}`}>
+                        {file.extension || file.file_type}
+                      </span>
+                    </div>
+                    <div className="library-status-cell">
+                      <span className={`status-pill ${file.is_embedded ? "enabled" : "disabled"}`}>
+                        {file.is_embedded ? "Yes" : "No"}
+                      </span>
+                    </div>
+                    <div className="library-updated-cell">
+                      <strong>{new Date(file.updated_at).toLocaleDateString()}</strong>
+                      <span>{new Date(file.updated_at).toLocaleTimeString()}</span>
+                    </div>
+                    <div className="library-row-actions">
+                      <button
+                        className="library-toggle-button"
+                        type="button"
+                        disabled={busySet.has(file.id)}
+                        onClick={() => onToggleFile(file)}
+                        aria-label={file.is_enabled ? `Disable ${file.file_name}` : `Enable ${file.file_name}`}
+                      >
+                        {file.is_enabled ? "Off" : "On"}
+                      </button>
+                      <button
+                        className="library-delete-button"
+                        type="button"
+                        disabled={busySet.has(file.id)}
+                        onClick={() => setDeleteTarget(file)}
+                        aria-label={`Delete ${file.file_name}`}
+                      >
+                        Del
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
           ) : null}
         </div>
       </div>
@@ -176,11 +203,11 @@ export function LibraryPage({
           onClose={() => setDeleteTarget(null)}
           actions={
             <>
-              <button className="secondary-button" type="button" onClick={() => setDeleteTarget(null)}>
+              <button className="secondary-button library-delete-cancel" type="button" onClick={() => setDeleteTarget(null)}>
                 Keep
               </button>
               <button
-                className="danger-button"
+                className="danger-button library-delete-confirm"
                 type="button"
                 onClick={() => {
                   onDeleteFile(deleteTarget.id);

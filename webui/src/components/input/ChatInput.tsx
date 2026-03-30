@@ -1,15 +1,19 @@
 import { useMemo, useRef, useState } from "react";
+import type { AssistantMode } from "../../types/chat";
 
 type ChatInputProps = {
   disabled: boolean;
+  assistantMode: AssistantMode;
+  availableModes: AssistantMode[];
   attachmentRules: {
     maxFiles: number;
     allowedExtensions: string[];
   };
-  onSend: (value: string, attachments: File[]) => Promise<void>;
+  onAssistantModeChange: (mode: AssistantMode) => void;
+  onSend: (value: string, attachments: File[], mode: AssistantMode) => Promise<void>;
 };
 
-export function ChatInput({ disabled, attachmentRules, onSend }: ChatInputProps) {
+export function ChatInput({ disabled, assistantMode, availableModes, attachmentRules, onAssistantModeChange, onSend }: ChatInputProps) {
   const [value, setValue] = useState("");
   const [attachments, setAttachments] = useState<File[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -59,16 +63,16 @@ export function ChatInput({ disabled, attachmentRules, onSend }: ChatInputProps)
     setValue("");
     setAttachments([]);
     setError(null);
-    await onSend(nextValue, nextAttachments);
+    await onSend(nextValue, nextAttachments, assistantMode);
   }
 
   return (
     <div className="composer-shell">
       {attachments.length > 0 ? (
-        <div className="attachment-preview-list">
+        <div className="attachment-preview-list composer-attachment-list">
           {attachments.map((file) => (
-            <div key={`${file.name}-${file.size}`} className="attachment-chip">
-              <span>{file.name}</span>
+            <div key={`${file.name}-${file.size}`} className="attachment-chip composer-attachment-chip">
+              <span className="composer-attachment-name">{file.name}</span>
               <button
                 type="button"
                 className="attachment-remove-button"
@@ -85,7 +89,7 @@ export function ChatInput({ disabled, attachmentRules, onSend }: ChatInputProps)
       <textarea
         className="composer-input"
         rows={1}
-        placeholder="Ask something about your indexed documents..."
+        placeholder="Ask anything about your indexed documents..."
         value={value}
         disabled={disabled}
         onChange={(event) => setValue(event.target.value)}
@@ -108,6 +112,21 @@ export function ChatInput({ disabled, attachmentRules, onSend }: ChatInputProps)
         <button className="attachment-button" type="button" onClick={() => inputRef.current?.click()} disabled={disabled}>
           Attach
         </button>
+        <label className="composer-mode-picker">
+          <span className="composer-mode-label">Assistant mode</span>
+          <select
+            className="composer-mode-select"
+            value={assistantMode}
+            onChange={(event) => onAssistantModeChange(event.target.value as AssistantMode)}
+            disabled={disabled}
+          >
+            {availableModes.map((mode) => (
+              <option key={mode} value={mode}>
+                {mode}
+              </option>
+            ))}
+          </select>
+        </label>
         <button className="send-button" type="button" disabled={disabled || !value.trim()} onClick={() => void handleSubmit()}>
           Send
         </button>

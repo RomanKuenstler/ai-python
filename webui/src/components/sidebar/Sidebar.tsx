@@ -8,8 +8,14 @@ type SidebarProps = {
   activeView: "chat" | "library";
   onCreateChat: () => void;
   onOpenLibrary: () => void;
+  onOpenArchive: () => void;
+  onOpenInfo: () => void;
+  onOpenHelp: () => void;
+  onOpenPreferences: (tab?: "general" | "personalization" | "settings" | "archive") => void;
   onSelectChat: (chatId: string) => void;
   onRenameChat: (chatId: string, chatName: string) => void;
+  onArchiveChat: (chatId: string) => void;
+  onDownloadChat: (chatId: string) => void;
   onDeleteChat: (chatId: string) => void;
 };
 
@@ -19,26 +25,38 @@ export function Sidebar({
   activeView,
   onCreateChat,
   onOpenLibrary,
+  onOpenArchive,
+  onOpenInfo,
+  onOpenHelp,
+  onOpenPreferences,
   onSelectChat,
   onRenameChat,
+  onArchiveChat,
+  onDownloadChat,
   onDeleteChat,
 }: SidebarProps) {
   const [menuChatId, setMenuChatId] = useState<string | null>(null);
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [renameTarget, setRenameTarget] = useState<Chat | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Chat | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const menuRef = useRef<HTMLDivElement | null>(null);
+  const userMenuRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     function handleDocumentClick(event: MouseEvent) {
       if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
         setMenuChatId(null);
       }
+      if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
+        setUserMenuOpen(false);
+      }
     }
 
     function handleEscape(event: KeyboardEvent) {
       if (event.key === "Escape") {
         setMenuChatId(null);
+        setUserMenuOpen(false);
       }
     }
 
@@ -59,7 +77,7 @@ export function Sidebar({
         <button className={`side-nav-item${activeView === "library" ? " active" : ""}`} type="button" onClick={onOpenLibrary}>
           Library
         </button>
-        <button className="side-nav-item is-disabled" type="button" disabled>
+        <button className="side-nav-item" type="button" onClick={onOpenArchive}>
           Archive chats
         </button>
       </div>
@@ -68,7 +86,12 @@ export function Sidebar({
 
       <div className="side-nav-chat-list" aria-label="Chats">
         {chats.map((chat) => (
-          <div key={chat.id} className={`side-nav-chat-row${chat.id === activeChatId && activeView === "chat" ? " active" : ""}`}>
+          <div
+            key={chat.id}
+            className={`side-nav-chat-row${chat.id === activeChatId && activeView === "chat" ? " active" : ""}${
+              menuChatId === chat.id ? " menu-open" : ""
+            }`}
+          >
             <button className={`side-nav-chat-item${chat.id === activeChatId && activeView === "chat" ? " active" : ""}`} type="button" onClick={() => onSelectChat(chat.id)}>
               <span>{chat.chat_name}</span>
             </button>
@@ -77,6 +100,7 @@ export function Sidebar({
                 className="chat-item-actions-trigger"
                 type="button"
                 aria-label={`Chat options for ${chat.chat_name}`}
+                aria-expanded={menuChatId === chat.id}
                 onClick={(event) => {
                   event.stopPropagation();
                   setMenuChatId((current) => (current === chat.id ? null : chat.id));
@@ -85,7 +109,7 @@ export function Sidebar({
                 ...
               </button>
               {menuChatId === chat.id ? (
-                <div className="chat-item-actions-menu">
+                <div className="chat-item-actions-menu" role="menu">
                   <button
                     className="chat-item-actions-option"
                     type="button"
@@ -96,6 +120,26 @@ export function Sidebar({
                     }}
                   >
                     Rename
+                  </button>
+                  <button
+                    className="chat-item-actions-option"
+                    type="button"
+                    onClick={() => {
+                      onArchiveChat(chat.id);
+                      setMenuChatId(null);
+                    }}
+                  >
+                    Archive
+                  </button>
+                  <button
+                    className="chat-item-actions-option"
+                    type="button"
+                    onClick={() => {
+                      onDownloadChat(chat.id);
+                      setMenuChatId(null);
+                    }}
+                  >
+                    Download
                   </button>
                   <button
                     type="button"
@@ -115,16 +159,37 @@ export function Sidebar({
       </div>
 
       <div className="side-nav-bottom">
-        <div className="side-nav-user">
-          <div className="side-nav-avatar-placeholder">LR</div>
-          <div className="side-nav-user-meta">
-            <strong>Local User</strong>
-            <small>Settings locked in Step 5</small>
-          </div>
+        <div className="side-nav-user-wrap" ref={userMenuRef}>
+          <button
+            className="side-nav-user user-menu-trigger"
+            type="button"
+            aria-expanded={userMenuOpen}
+            onClick={() => setUserMenuOpen((current) => !current)}
+          >
+            <div className="side-nav-avatar-placeholder">LR</div>
+            <div className="side-nav-user-meta">
+              <strong>Local User</strong>
+              <small>Step 6 controls enabled</small>
+            </div>
+            <div className="side-nav-user-menu-icon">...</div>
+          </button>
+          {userMenuOpen ? (
+            <div className="user-menu-dropdown" role="menu">
+              <button className="chat-item-actions-option" type="button" onClick={onOpenInfo}>
+                Info
+              </button>
+              <button className="chat-item-actions-option" type="button" onClick={onOpenHelp}>
+                Help
+              </button>
+              <button className="chat-item-actions-option" type="button" onClick={() => onOpenPreferences("settings")}>
+                Preferences
+              </button>
+              <button className="chat-item-actions-option" type="button" onClick={() => onOpenPreferences("personalization")}>
+                Personalization
+              </button>
+            </div>
+          ) : null}
         </div>
-        <button className="side-nav-item is-disabled" type="button" disabled>
-          Personalization
-        </button>
       </div>
 
       {renameTarget ? (

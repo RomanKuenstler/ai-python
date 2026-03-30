@@ -14,14 +14,11 @@ The retriever now has two entry points:
 5. Drop candidates below `RETRIEVAL_SCORE_THRESHOLD`.
 6. Sort the remaining candidates by descending score.
 7. Keep up to `RETRIEVAL_MAX_RESULTS` chunks.
-8. Build prompt layers from:
-   - `prompts/guardrails.md`
-   - `prompts/assistant.md`
-   - `prompts/ragcontext.md`
-   - recent history for the same chat only
-   - the live user message
+8. Route the request by assistant mode:
+   - `simple`: one prompt pass with `prompts/assistant.md`
+   - `refine`: draft prompt plus refinement prompt
 9. Call the configured local LLM endpoint.
-10. Store the assistant message and retrieval evidence in PostgreSQL.
+10. Store only the final assistant message and retrieval evidence in PostgreSQL.
 11. Return structured JSON to the web UI or print the formatted source section in the CLI.
 
 ## Score Semantics
@@ -37,9 +34,15 @@ If no chunk passes the threshold, the retriever still calls the LLM with a `No e
 - `GET /api/health`
 - `POST /api/chats`
 - `GET /api/chats`
+- `GET /api/chats/archived`
 - `GET /api/chats/{chat_id}`
+- `PATCH /api/chats/{chat_id}/archive`
+- `PATCH /api/chats/{chat_id}/unarchive`
 - `GET /api/chats/{chat_id}/messages`
+- `GET /api/chats/{chat_id}/download`
 - `POST /api/chats/{chat_id}/messages`
+- `GET /api/settings`
+- `PATCH /api/settings`
 
 ## Source Display
 

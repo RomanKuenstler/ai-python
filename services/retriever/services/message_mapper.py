@@ -8,6 +8,7 @@ def map_chat(chat: ChatSession) -> ChatRead:
     return ChatRead(
         id=chat.id,
         chat_name=chat.chat_name,
+        is_archived=chat.is_archived,
         created_at=chat.created_at,
         updated_at=chat.updated_at,
     )

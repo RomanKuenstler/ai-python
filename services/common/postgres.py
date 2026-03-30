@@ -9,17 +9,18 @@ from sqlalchemy import create_engine, delete, func, inspect, select, text
 from sqlalchemy.orm import Session, sessionmaker
 
 from services.common.migrations import run_migrations
-from services.common.models import ChatMessage, ChatSession, ChunkRecord, FileRecord, MessageAttachment, RetrievalLog
+from services.common.models import ChatMessage, ChatSession, ChunkRecord, FileRecord, MessageAttachment, RetrievalLog, SettingRecord
 from services.common.retry import retry
 
 
 class PostgresClient:
     def __init__(self, database_url: str) -> None:
+        self.database_url = database_url
         self.engine = create_engine(database_url, pool_pre_ping=True)
         self.session_factory = sessionmaker(bind=self.engine, expire_on_commit=False)
 
     def initialize(self) -> None:
-        retry(lambda: run_migrations(str(self.engine.url)))
+        retry(lambda: run_migrations(self.database_url))
 
     @contextmanager
     def session(self) -> Iterator[Session]:
@@ -154,9 +155,13 @@ class PostgresClient:
             session.refresh(chat)
             return chat
 
-    def list_chats(self) -> list[ChatSession]:
+    def list_chats(self, *, archived: bool = False) -> list[ChatSession]:
         with self.session() as session:
-            rows = session.scalars(select(ChatSession).order_by(ChatSession.updated_at.desc(), ChatSession.created_at.desc()))
+            rows = session.scalars(
+                select(ChatSession)
+                .where(ChatSession.is_archived.is_(archived))
+                .order_by(ChatSession.updated_at.desc(), ChatSession.created_at.desc())
+            )
             return list(rows)
 
     def get_chat(self, chat_id: str) -> ChatSession | None:
@@ -182,6 +187,17 @@ class PostgresClient:
             session.execute(delete(RetrievalLog).where(RetrievalLog.session_id == chat_id))
             session.execute(delete(ChatMessage).where(ChatMessage.session_id == chat_id))
             session.delete(chat)
+            return chat
+
+    def set_chat_archived(self, chat_id: str, is_archived: bool) -> ChatSession | None:
+        with self.session() as session:
+            chat = session.get(ChatSession, chat_id)
+            if chat is None:
+                return None
+            chat.is_archived = is_archived
+            chat.updated_at = datetime.now(timezone.utc)
+            session.flush()
+            session.refresh(chat)
             return chat
 
     def touch_chat(self, chat_id: str) -> None:
@@ -309,3 +325,21 @@ class PostgresClient:
         chat = session.get(ChatSession, chat_id)
         if chat is not None:
             chat.updated_at = datetime.now(timezone.utc)
+
+    def list_settings(self) -> list[SettingRecord]:
+        with self.session() as session:
+            rows = session.scalars(select(SettingRecord).order_by(SettingRecord.key.asc()))
+            return list(rows)
+
+    def upsert_setting(self, key: str, value: str) -> SettingRecord:
+        with self.session() as session:
+            record = session.scalar(select(SettingRecord).where(SettingRecord.key == key))
+            if record is None:
+                record = SettingRecord(key=key, value=value)
+                session.add(record)
+            else:
+                record.value = value
+                record.updated_at = datetime.now(timezone.utc)
+            session.flush()
+            session.refresh(record)
+            return record

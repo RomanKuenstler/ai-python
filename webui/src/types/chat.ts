@@ -1,6 +1,7 @@
 export type Chat = {
   id: string;
   chat_name: string;
+  is_archived: boolean;
   created_at: string;
   updated_at: string;
 };
@@ -45,8 +46,44 @@ export type MessageResponse = {
   chat_id: string;
   user_message: Message;
   assistant_message: Message;
+  assistant_mode: AssistantMode;
   sources: Source[];
   attachments_used: AttachmentMeta[];
+};
+
+export type AssistantMode = "simple" | "refine";
+
+export type Settings = {
+  chat_history_messages_count: number;
+  max_similarities: number;
+  min_similarities: number;
+  similarity_score_threshold: number;
+  default_assistant_mode: AssistantMode;
+  available_assistant_modes: AssistantMode[];
+};
+
+export type SettingsUpdate = {
+  chat_history_messages_count: number;
+  max_similarities: number;
+  min_similarities: number;
+  similarity_score_threshold: number;
+};
+
+export type DownloadMessage = {
+  role: "user" | "assistant" | string;
+  content: string;
+  created_at: string;
+  sources: Source[];
+  attachments: AttachmentMeta[];
+};
+
+export type ChatDownload = {
+  chat_id: string;
+  chat_name: string;
+  is_archived: boolean;
+  created_at: string;
+  updated_at: string;
+  messages: DownloadMessage[];
 };
 
 export type LibraryFile = {

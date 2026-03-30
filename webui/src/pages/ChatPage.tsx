@@ -11,15 +11,23 @@ export function ChatPage() {
     loadingMessages,
     sending,
     appError,
+    assistantMode,
+    settings,
     attachmentRules,
     createChat,
     ensureChatLoaded,
     renameChat,
+    archiveChat,
+    downloadChat,
     deleteChat,
+    setAssistantMode,
+    sendMessage,
   } = useChatApp();
 
   return (
     <AppShell
+      onOpenArchive={() => undefined}
+      onOpenPreferences={() => undefined}
       sidebar={
         <Sidebar
           chats={chats}
@@ -27,8 +35,14 @@ export function ChatPage() {
           activeView="chat"
           onCreateChat={() => void createChat()}
           onOpenLibrary={() => undefined}
+          onOpenArchive={() => undefined}
+          onOpenInfo={() => undefined}
+          onOpenHelp={() => undefined}
+          onOpenPreferences={() => undefined}
           onSelectChat={(chatId) => void ensureChatLoaded(chatId)}
           onRenameChat={(chatId, chatName) => void renameChat(chatId, chatName)}
+          onArchiveChat={(chatId) => void archiveChat(chatId)}
+          onDownloadChat={(chatId) => void downloadChat(chatId)}
           onDeleteChat={(chatId) => void deleteChat(chatId)}
         />
       }
@@ -38,8 +52,11 @@ export function ChatPage() {
           sending={sending}
           loadingMessages={loadingMessages}
           error={appError}
+          assistantMode={assistantMode}
+          availableModes={settings?.available_assistant_modes ?? ["simple", "refine"]}
           attachmentRules={attachmentRules}
-          onSend={async () => undefined}
+          onAssistantModeChange={setAssistantMode}
+          onSend={sendMessage}
         />
       }
     />
