@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { BrowserRouter, Navigate, Route, Routes, useLocation, useNavigate, useParams } from "react-router-dom";
+import { AdminPage } from "../components/admin/AdminPage";
 import { ChatView } from "../components/chat/ChatView";
 import { Dialog } from "../components/common/Dialog";
 import { AppShell } from "../components/layout/AppShell";
@@ -7,7 +8,8 @@ import { LibraryPage } from "../components/library/LibraryPage";
 import { PreferencesDialog } from "../components/preferences/PreferencesDialog";
 import { Sidebar } from "../components/sidebar/Sidebar";
 import { useChatApp } from "../hooks/useChatApp";
-import type { AssistantMode } from "../types/chat";
+import { LoginPage } from "../pages/LoginPage";
+import { PasswordChangePage } from "../pages/PasswordChangePage";
 
 type PreferencesTab = "general" | "personalization" | "settings" | "filter" | "archive";
 
@@ -15,20 +17,53 @@ function AppRoutes() {
   const app = useChatApp();
   const navigate = useNavigate();
   const location = useLocation();
-  const activeView = location.pathname.startsWith("/library") ? "library" : "chat";
+  const activeView = location.pathname.startsWith("/library") ? "library" : location.pathname.startsWith("/admin") ? "admin" : "chat";
   const [preferencesTab, setPreferencesTab] = useState<PreferencesTab | null>(null);
   const [infoOpen, setInfoOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
+  const [passwordDialogOpen, setPasswordDialogOpen] = useState(false);
 
   useEffect(() => {
-    if (app.bootstrapping || app.chats.length === 0) {
+    if (!app.isAuthenticated || app.requiresPasswordChange || app.bootstrapping || app.chats.length === 0) {
       return;
     }
 
-    if (location.pathname === "/") {
-      navigate(`/chats/${app.activeChatId ?? app.chats[0].id}`, { replace: true });
+    const fallbackChatId = app.activeChatId ?? app.chats[0].id;
+    const currentChatId = location.pathname.startsWith("/chats/") ? location.pathname.split("/")[2] ?? null : null;
+
+    if (location.pathname === "/" || location.pathname === "/login") {
+      navigate(`/chats/${fallbackChatId}`, { replace: true });
+      return;
     }
-  }, [app.activeChatId, app.bootstrapping, app.chats, location.pathname, navigate]);
+
+    if (currentChatId && !app.chats.some((chat) => chat.id === currentChatId)) {
+      navigate(`/chats/${fallbackChatId}`, { replace: true });
+    }
+  }, [app.activeChatId, app.bootstrapping, app.chats, app.isAuthenticated, app.requiresPasswordChange, location.pathname, navigate]);
+
+  if (!app.authReady || app.authLoading) {
+    return <div className="auth-screen"><div className="auth-card"><p>Loading session...</p></div></div>;
+  }
+
+  if (!app.isAuthenticated) {
+    return <LoginPage loading={app.authLoading} error={app.authError} onSubmit={(username, password) => app.login(username, password).then(() => undefined)} />;
+  }
+
+  if (!app.currentUser) {
+    return null;
+  }
+
+  if (app.requiresPasswordChange) {
+    return (
+      <PasswordChangePage
+        user={app.currentUser}
+        loading={app.passwordChanging}
+        error={app.authError}
+        onSubmit={(currentPassword, newPassword, confirmPassword) => app.changePassword(currentPassword, newPassword, confirmPassword).then(() => undefined)}
+        onLogout={app.logout}
+      />
+    );
+  }
 
   async function openPreferences(tab: PreferencesTab = "general") {
     setPreferencesTab(tab);
@@ -72,12 +107,16 @@ function AppRoutes() {
       chats={app.chats}
       activeChatId={app.activeChatId}
       activeView={activeView}
+      currentUser={app.currentUser}
       onCreateChat={() => void handleCreateChat()}
       onOpenLibrary={() => navigate("/library")}
+      onOpenAdmin={() => navigate("/admin")}
       onOpenArchive={() => void openPreferences("archive")}
       onOpenInfo={() => setInfoOpen(true)}
       onOpenHelp={() => setHelpOpen(true)}
       onOpenPreferences={(tab) => void openPreferences(tab ?? "settings")}
+      onOpenChangePassword={() => setPasswordDialogOpen(true)}
+      onLogout={() => void app.logout()}
       onSelectChat={(chatId) => void handleSelectChat(chatId)}
       onRenameChat={(chatId, chatName) => void handleRenameChat(chatId, chatName)}
       onArchiveChat={(chatId) => void handleArchiveChat(chatId)}
@@ -109,6 +148,26 @@ function AppRoutes() {
                   onDeleteFile={(fileId) => void app.deleteLibraryFile(fileId)}
                   onUploadFiles={(files, tagsByFile) => app.uploadLibraryFiles(files, tagsByFile)}
                 />
+              }
+            />
+            <Route
+              path="/admin"
+              element={
+                app.currentUser.role === "admin" ? (
+                  <AdminPage
+                    currentUser={app.currentUser}
+                    users={app.adminUsers}
+                    loading={app.adminLoading}
+                    error={app.adminError}
+                    busyUserIds={app.adminBusyUserIds}
+                    onLoad={() => void app.loadAdminUsers()}
+                    onCreateUser={(payload) => app.createAdminUser(payload).then(() => undefined)}
+                    onUpdateUser={(userId, payload) => app.updateAdminUser(userId, payload).then(() => undefined)}
+                    onDeleteUser={(userId) => app.deleteAdminUser(userId).then(() => undefined)}
+                  />
+                ) : (
+                  <Navigate to="/" replace />
+                )
               }
             />
             <Route
@@ -150,6 +209,29 @@ function AppRoutes() {
         />
       ) : null}
 
+      {passwordDialogOpen ? (
+        <Dialog
+          title="Change Password"
+          onClose={() => setPasswordDialogOpen(false)}
+          className="dialog-wide"
+          actions={null}
+        >
+          <PasswordChangePage
+            user={app.currentUser}
+            loading={app.passwordChanging}
+            error={app.authError}
+            requiresCurrentPassword
+            compact
+            showLogout={false}
+            onSubmit={async (currentPassword, newPassword, confirmPassword) => {
+              await app.changePassword(currentPassword, newPassword, confirmPassword);
+              setPasswordDialogOpen(false);
+            }}
+            onLogout={app.logout}
+          />
+        </Dialog>
+      ) : null}
+
       {infoOpen ? (
         <Dialog
           title="Info"
@@ -162,12 +244,12 @@ function AppRoutes() {
               <h4>Status</h4>
               <div className="info-table">
                 {[
-                  ["Backend", "Web API orchestration and chat handling."],
+                  ["Backend", "Web API orchestration, auth, and chat handling."],
                   ["Retriever", "Retrieval, prompt assembly, and answer generation."],
                   ["Embedder", "Processes library files and maintains embeddings."],
                   ["OCR Scanner", "Extracts text from supported images when needed."],
                   ["Vector Db", "Stores nearest-neighbor retrieval vectors."],
-                  ["Postgres", "Stores chats, messages, file metadata, and settings."],
+                  ["Postgres", "Stores users, chats, file metadata, and settings."],
                 ].map(([label, description]) => (
                   <div className="info-row" key={label}>
                     <div className="info-copy">
@@ -179,58 +261,25 @@ function AppRoutes() {
                 ))}
               </div>
             </section>
-            <section className="info-panel-section">
-              <h4>Storage</h4>
-              <div className="info-table">
-                <div className="info-row">
-                  <div className="info-copy">
-                    <strong>Knowledge Base</strong>
-                  </div>
-                  <span>Qdrant</span>
-                </div>
-                <div className="info-row">
-                  <div className="info-copy">
-                    <strong>Persistent Storage</strong>
-                  </div>
-                  <span>Postgres</span>
-                </div>
-              </div>
-            </section>
           </div>
         </Dialog>
       ) : null}
 
       {helpOpen ? (
-        <Dialog
-          title="Help"
-          onClose={() => setHelpOpen(false)}
-          className="dialog-wide help-dialog"
-          actions={null}
-        >
+        <Dialog title="Help" onClose={() => setHelpOpen(false)} className="dialog-wide help-dialog" actions={null}>
           <div className="info-panel">
+            <section className="info-panel-section">
+              <h4>Authentication</h4>
+              <p>Sign in with a provisioned user. New or reset users must change the default password before entering the app.</p>
+            </section>
             <section className="info-panel-section">
               <h4>Chat Usage</h4>
               <p>Create chats from the sidebar, use one chat per topic when helpful, and open the chat menu to rename, download, archive, or delete a chat.</p>
               <p>Type in the bottom composer and press Enter to send or Shift+Enter for a new line.</p>
             </section>
-            <section className="info-panel-section">
-              <h4>Attachable File Extensions</h4>
-              <div className="chip-row">
-                {[".md", ".txt", ".html", ".htm", ".pdf", ".epub", ".csv", ".png", ".jpg", ".jpeg", ".webp"].map((extension) => (
-                  <span key={extension} className="tag-pill">
-                    {extension}
-                  </span>
-                ))}
-              </div>
-            </section>
-            <section className="info-panel-section">
-              <h4>Preferences</h4>
-              <p>Use Preferences to review assistant modes, retrieval settings, personalization placeholders, and archived chats.</p>
-            </section>
           </div>
         </Dialog>
       ) : null}
-
     </>
   );
 }

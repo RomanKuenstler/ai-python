@@ -3,7 +3,9 @@ from __future__ import annotations
 from fastapi.testclient import TestClient
 
 from services.retriever.api.app import create_app
-from services.retriever.api.dependencies import get_retriever_service
+from services.retriever.api.dependencies import get_app_auth_context, get_auth_context, get_retriever_service
+from services.retriever.auth import AuthContext
+from services.common.models import UserAccount
 from services.retriever.schemas.chat import (
     AttachmentRead,
     ChatDownloadResponse,
@@ -18,7 +20,20 @@ from services.retriever.schemas.chat import (
 
 
 class StubRetrieverService:
-    def create_chat(self) -> ChatRead:
+    def __init__(self) -> None:
+        self.user = UserAccount(
+            id=1,
+            username="admin",
+            displayname="Admin User",
+            password_hash="hash",
+            role="admin",
+            status="active",
+            force_password_change=False,
+            created_at="2026-03-29T00:00:00Z",
+            updated_at="2026-03-29T00:00:00Z",
+        )
+
+    def create_chat(self, *_args, **_kwargs) -> ChatRead:
         return ChatRead(
             id="chat-1",
             chat_name="chat-abc123",
@@ -27,26 +42,31 @@ class StubRetrieverService:
             updated_at="2026-03-29T00:00:00Z",
         )
 
-    def list_chats(self) -> list[ChatRead]:
+    def list_chats(self, *_args, **_kwargs) -> list[ChatRead]:
         return [self.create_chat()]
 
-    def get_chat(self, chat_id: str) -> ChatRead | None:
+    def get_chat(self, *_args, chat_id: str | None = None, **_kwargs) -> ChatRead | None:
+        if chat_id is None and _args:
+            chat_id = _args[-1]
         if chat_id != "chat-1":
             return None
         return self.create_chat()
 
-    def rename_chat(self, chat_id: str, chat_name: str) -> ChatRead | None:
+    def rename_chat(self, *_args, chat_id: str | None = None, chat_name: str | None = None, **_kwargs) -> ChatRead | None:
+        if chat_id is None and len(_args) >= 2:
+            chat_id = _args[-2]
+            chat_name = _args[-1]
         if chat_id != "chat-1":
             return None
         return ChatRead(
             id="chat-1",
-            chat_name=chat_name,
+                chat_name=chat_name or "Renamed chat",
             is_archived=False,
             created_at="2026-03-29T00:00:00Z",
             updated_at="2026-03-29T00:00:02Z",
         )
 
-    def list_archived_chats(self) -> list[ChatRead]:
+    def list_archived_chats(self, *_args, **_kwargs) -> list[ChatRead]:
         return [
             ChatRead(
                 id="chat-2",
@@ -57,7 +77,9 @@ class StubRetrieverService:
             )
         ]
 
-    def archive_chat(self, chat_id: str) -> ChatRead | None:
+    def archive_chat(self, *_args, chat_id: str | None = None, **_kwargs) -> ChatRead | None:
+        if chat_id is None and _args:
+            chat_id = _args[-1]
         if chat_id != "chat-1":
             return None
         return ChatRead(
@@ -68,7 +90,9 @@ class StubRetrieverService:
             updated_at="2026-03-29T00:00:03Z",
         )
 
-    def unarchive_chat(self, chat_id: str) -> ChatRead | None:
+    def unarchive_chat(self, *_args, chat_id: str | None = None, **_kwargs) -> ChatRead | None:
+        if chat_id is None and _args:
+            chat_id = _args[-1]
         if chat_id != "chat-2":
             return None
         return ChatRead(
@@ -79,12 +103,16 @@ class StubRetrieverService:
             updated_at="2026-03-29T00:00:04Z",
         )
 
-    def delete_chat(self, chat_id: str) -> ChatRead | None:
+    def delete_chat(self, *_args, chat_id: str | None = None, **_kwargs) -> ChatRead | None:
+        if chat_id is None and _args:
+            chat_id = _args[-1]
         if chat_id != "chat-1":
             return None
         return self.create_chat()
 
-    def get_chat_messages(self, chat_id: str) -> list[MessageRead]:
+    def get_chat_messages(self, *_args, chat_id: str | None = None, **_kwargs) -> list[MessageRead]:
+        if chat_id is None and _args:
+            chat_id = _args[-1]
         if chat_id != "chat-1":
             return []
         return [
@@ -115,11 +143,17 @@ class StubRetrieverService:
 
     def send_message(
         self,
-        chat_id: str,
-        user_content: str,
+        *_args,
+        chat_id: str | None = None,
+        user_content: str | None = None,
         attachments: list[tuple[str, bytes]] | None = None,
         assistant_mode: str | None = None,
     ):
+        if chat_id is None and len(_args) >= 3:
+            chat_id = _args[1]
+            user_content = _args[2]
+        if attachments is None and len(_args) >= 4:
+            attachments = _args[3]
         if chat_id != "chat-1":
             return None
         attachment_payload = [
@@ -136,7 +170,7 @@ class StubRetrieverService:
                 id="1",
                 chat_id="chat-1",
                 role="user",
-                content=user_content,
+                content=user_content or "",
                 status="completed",
                 has_attachments=bool(attachments),
                 created_at="2026-03-29T00:00:00Z",
@@ -171,7 +205,9 @@ class StubRetrieverService:
             "attachments_used": attachment_payload if attachments else [],
         }
 
-    def download_chat(self, chat_id: str) -> ChatDownloadResponse | None:
+    def download_chat(self, *_args, chat_id: str | None = None, **_kwargs) -> ChatDownloadResponse | None:
+        if chat_id is None and _args:
+            chat_id = _args[-1]
         if chat_id != "chat-1":
             return None
         return ChatDownloadResponse(
@@ -210,7 +246,7 @@ class StubRetrieverService:
             ],
         )
 
-    def get_settings(self) -> SettingsRead:
+    def get_settings(self, *_args, **_kwargs) -> SettingsRead:
         return SettingsRead(
             chat_history_messages_count=5,
             max_similarities=8,
@@ -220,7 +256,9 @@ class StubRetrieverService:
             available_assistant_modes=["simple", "refine"],
         )
 
-    def update_settings(self, payload) -> SettingsRead:
+    def update_settings(self, *_args, payload=None, **_kwargs) -> SettingsRead:
+        if payload is None and _args:
+            payload = _args[-1]
         if payload.min_similarities > payload.max_similarities:
             raise ValueError("min similarities cannot be greater than max similarities")
         return SettingsRead(
@@ -232,7 +270,7 @@ class StubRetrieverService:
             available_assistant_modes=["simple", "refine"],
         )
 
-    def list_library_files(self) -> LibraryListResponse:
+    def list_library_files(self, *_args, **_kwargs) -> LibraryListResponse:
         return LibraryListResponse(
             files=[
                 LibraryFileRead(
@@ -257,16 +295,20 @@ class StubRetrieverService:
             default_tag="default",
         )
 
-    def upload_library_files(self, uploads, tags_by_file_raw: str | None):
+    def upload_library_files(self, *_args, uploads=None, tags_by_file_raw: str | None = None, **_kwargs):
         return {"files": self.list_library_files().files}
 
-    def update_library_file(self, file_id: int, *, is_enabled: bool):
+    def update_library_file(self, *_args, file_id: int | None = None, is_enabled: bool = True, **_kwargs):
+        if file_id is None and _args:
+            file_id = _args[-1]
         if file_id != 1:
             return None
         record = self.list_library_files().files[0]
         return record.model_copy(update={"is_enabled": is_enabled})
 
-    def delete_library_file(self, file_id: int):
+    def delete_library_file(self, *_args, file_id: int | None = None, **_kwargs):
+        if file_id is None and _args:
+            file_id = _args[-1]
         if file_id != 1:
             return None
         return self.list_library_files().files[0]
@@ -274,7 +316,10 @@ class StubRetrieverService:
 
 def build_client() -> TestClient:
     app = create_app()
+    auth = AuthContext(user=StubRetrieverService().user, session=type("Session", (), {"id": "session-1", "expires_at": "2026-03-29T02:00:00Z", "max_expires_at": "2026-03-29T12:00:00Z"})(), token="token")
     app.dependency_overrides[get_retriever_service] = lambda: StubRetrieverService()
+    app.dependency_overrides[get_auth_context] = lambda: auth
+    app.dependency_overrides[get_app_auth_context] = lambda: auth
     return TestClient(app)
 
 

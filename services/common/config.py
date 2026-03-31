@@ -87,6 +87,12 @@ class Settings:
         ".txt,.md,.html,.htm,.pdf,.epub,.csv,.png,.jpg,.jpeg,.webp",
     )
     default_tag: str = os.getenv("DEFAULT_TAG", "default")
+    jwt_secret: str = os.getenv("JWT_SECRET", "supersecretkey")
+    jwt_expiration_minutes: int = _get_int("JWT_EXPIRATION_MINUTES", 120)
+    jwt_refresh_threshold_minutes: int = _get_int("JWT_REFRESH_THRESHOLD_MINUTES", 60)
+    jwt_max_lifetime_minutes: int = _get_int("JWT_MAX_LIFETIME_MINUTES", 720)
+    password_salt: str = os.getenv("PASSWORD_SALT", "%vSp3$")
+    users_file: str = os.getenv("USERS_FILE", "/app/users.json")
 
     @property
     def database_url(self) -> str:

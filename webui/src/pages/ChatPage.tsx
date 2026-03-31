@@ -5,6 +5,7 @@ import { useChatApp } from "../hooks/useChatApp";
 
 export function ChatPage() {
   const {
+    currentUser,
     chats,
     activeChatId,
     activeMessages,
@@ -24,6 +25,10 @@ export function ChatPage() {
     sendMessage,
   } = useChatApp();
 
+  if (!currentUser) {
+    return null;
+  }
+
   return (
     <AppShell
       assistantMode={assistantMode}
@@ -34,12 +39,16 @@ export function ChatPage() {
           chats={chats}
           activeChatId={activeChatId}
           activeView="chat"
+          currentUser={currentUser}
           onCreateChat={() => void createChat()}
           onOpenLibrary={() => undefined}
+          onOpenAdmin={() => undefined}
           onOpenArchive={() => undefined}
           onOpenInfo={() => undefined}
           onOpenHelp={() => undefined}
           onOpenPreferences={() => undefined}
+          onOpenChangePassword={() => undefined}
+          onLogout={() => undefined}
           onSelectChat={(chatId) => void ensureChatLoaded(chatId)}
           onRenameChat={(chatId, chatName) => void renameChat(chatId, chatName)}
           onArchiveChat={(chatId) => void archiveChat(chatId)}

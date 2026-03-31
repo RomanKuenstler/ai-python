@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from services.common.config import Settings
+from services.common.models import UserAccount
 from services.embedder.processor import FileProcessor
 from services.embedder.utils import load_tags, normalize_tags, save_tags
 from services.retriever.schemas.chat import LibraryListResponse, LibrarySummaryRead
@@ -26,9 +27,10 @@ class LibraryManager:
         self.processor = processor
         self.settings = settings
         self.tags_path = data_dir / "tags.json"
+        self.uploads_dir = data_dir / "uploads"
 
-    def list_files(self) -> LibraryListResponse:
-        records = self.processor.postgres_client.list_files()
+    def list_files(self, user: UserAccount) -> LibraryListResponse:
+        records = self.processor.postgres_client.list_files_for_user(user_id=user.id, is_admin=user.role == "admin")
         tags_map = load_tags(self.tags_path)
         normalized_records = []
         for record in records:
@@ -48,7 +50,14 @@ class LibraryManager:
             total_chunks=sum(int(record.chunk_count or 0) for record in normalized_records),
         )
         return LibraryListResponse(
-            files=[map_library_file(record) for record in normalized_records],
+            files=[
+                map_library_file(
+                    record,
+                    can_delete=user.role == "admin" or record.uploaded_by_user_id == user.id,
+                    can_toggle_enabled=user.role == "admin" or not record.is_system,
+                )
+                for record in normalized_records
+            ],
             summary=summary,
             allowed_extensions=sorted(self.settings.allowed_upload_extension_set),
             max_upload_files=self.settings.max_upload_files,
@@ -56,16 +65,27 @@ class LibraryManager:
             default_tag=self.settings.default_tag,
         )
 
-    def update_file_state(self, file_id: int, *, is_enabled: bool):
-        record = self.processor.postgres_client.set_file_enabled(file_id, is_enabled)
+    def update_file_state(self, user: UserAccount, file_id: int, *, is_enabled: bool):
+        record = self.processor.postgres_client.set_file_enabled_for_user(
+            user_id=user.id,
+            file_id=file_id,
+            is_enabled=is_enabled,
+            is_admin=user.role == "admin",
+        )
         if record is None:
             return None
-        return map_library_file(record)
+        return map_library_file(
+            record,
+            can_delete=user.role == "admin" or record.uploaded_by_user_id == user.id,
+            can_toggle_enabled=user.role == "admin" or not record.is_system,
+        )
 
-    def delete_file(self, file_id: int):
+    def delete_file(self, user: UserAccount, file_id: int):
         record = self.processor.postgres_client.get_file_by_id(file_id)
         if record is None:
             return None
+        if user.role != "admin" and record.uploaded_by_user_id != user.id:
+            raise PermissionError("Users can only delete files they uploaded")
 
         absolute_path = self.data_dir / record.file_path
         if absolute_path.exists():
@@ -73,9 +93,13 @@ class LibraryManager:
 
         self.processor.delete(record.file_path)
         self._remove_tags(record.file_path, record.file_name)
-        return map_library_file(record)
+        return map_library_file(
+            record,
+            can_delete=user.role == "admin" or record.uploaded_by_user_id == user.id,
+            can_toggle_enabled=user.role == "admin" or not record.is_system,
+        )
 
-    def upload_files(self, uploads: list[UploadFilePayload], tags_by_file: dict[str, list[str]]):
+    def upload_files(self, user: UserAccount, uploads: list[UploadFilePayload], tags_by_file: dict[str, list[str]]):
         if len(uploads) > self.settings.max_upload_files:
             raise ValueError(f"Upload supports up to {self.settings.max_upload_files} files at a time")
 
@@ -83,6 +107,8 @@ class LibraryManager:
         stored_records = []
         current_tags = load_tags(self.tags_path)
         existing_names = {record.file_name for record in self.processor.postgres_client.list_files()}
+        user_dir = self.uploads_dir / user.username
+        user_dir.mkdir(parents=True, exist_ok=True)
 
         for upload in uploads:
             file_name = Path(upload.file_name).name
@@ -91,7 +117,7 @@ class LibraryManager:
             if file_name in seen_names:
                 raise ValueError(f"Duplicate file in upload request: {file_name}")
             seen_names.add(file_name)
-            if file_name in existing_names or (self.data_dir / file_name).exists():
+            if file_name in existing_names:
                 raise ValueError(f"File already exists in library: {file_name}")
 
             suffix = Path(file_name).suffix.lower()
@@ -104,16 +130,24 @@ class LibraryManager:
 
         for upload in uploads:
             file_name = Path(upload.file_name).name
-            target_path = self.data_dir / file_name
+            target_path = user_dir / file_name
             target_path.write_bytes(upload.content)
+            relative_path = str(target_path.relative_to(self.data_dir))
             normalized_tags = normalize_tags(tags_by_file.get(file_name, []), self.settings.default_tag)
+            current_tags[relative_path] = normalized_tags
             current_tags[file_name] = normalized_tags
             save_tags(self.tags_path, current_tags)
             self.processor.tags_map = current_tags
             self.processor.process(target_path)
-            record = self.processor.postgres_client.get_file(str(target_path.relative_to(self.data_dir)))
+            record = self.processor.postgres_client.get_file(relative_path)
             if record is not None:
-                stored_records.append(map_library_file(record))
+                stored_records.append(
+                    map_library_file(
+                        record,
+                        can_delete=True,
+                        can_toggle_enabled=True,
+                    )
+                )
 
         return stored_records
 

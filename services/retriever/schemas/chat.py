@@ -109,6 +109,10 @@ class LibraryFileRead(BaseModel):
     tags: list[str] = Field(default_factory=list)
     is_embedded: bool
     is_enabled: bool
+    is_system: bool = False
+    uploaded_by_user_id: int | None = None
+    can_delete: bool = False
+    can_toggle_enabled: bool = True
     processing_status: str
     updated_at: datetime
 

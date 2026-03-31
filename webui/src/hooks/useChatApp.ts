@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
-import { apiClient } from "../api/client";
+import { apiClient, clearStoredAuthSession, getStoredAuthSession, setStoredAuthSession, subscribeAuthSession } from "../api/client";
 import type {
+  AdminUser,
   AssistantMode,
   AttachmentMeta,
+  AuthSession,
   Chat,
   LibraryFile,
   LibraryResponse,
@@ -50,8 +52,22 @@ function triggerJsonDownload(fileName: string, data: unknown) {
   URL.revokeObjectURL(url);
 }
 
+function clearAppSessionState() {
+  window.localStorage.removeItem(ACTIVE_CHAT_STORAGE_KEY);
+}
+
 export function useChatApp() {
-  const [bootstrapping, setBootstrapping] = useState(true);
+  const [authReady, setAuthReady] = useState(false);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [authSession, setAuthSession] = useState<AuthSession | null>(getStoredAuthSession());
+  const [passwordChanging, setPasswordChanging] = useState(false);
+  const [adminUsers, setAdminUsers] = useState<AdminUser[]>([]);
+  const [adminLoading, setAdminLoading] = useState(false);
+  const [adminError, setAdminError] = useState<string | null>(null);
+  const [adminBusyUserIds, setAdminBusyUserIds] = useState<number[]>([]);
+
+  const [bootstrapping, setBootstrapping] = useState(false);
   const [chats, setChats] = useState<Chat[]>([]);
   const [archivedChats, setArchivedChats] = useState<Chat[]>([]);
   const [messagesByChat, setMessagesByChat] = useState<Record<string, Message[]>>({});
@@ -72,11 +88,64 @@ export function useChatApp() {
   const [settingsError, setSettingsError] = useState<string | null>(null);
   const [settingsSuccess, setSettingsSuccess] = useState<string | null>(null);
 
+  useEffect(() => subscribeAuthSession(setAuthSession), []);
+
   useEffect(() => {
-    void bootstrap();
+    void restoreSession();
   }, []);
 
-  async function bootstrap() {
+  useEffect(() => {
+    if (!authSession?.expires_at) {
+      return undefined;
+    }
+    const expiresAt = new Date(authSession.expires_at).getTime();
+    const remaining = expiresAt - Date.now();
+    if (remaining <= 0) {
+      void logout();
+      return undefined;
+    }
+    const timeout = window.setTimeout(() => {
+      void logout();
+    }, remaining);
+    return () => window.clearTimeout(timeout);
+  }, [authSession?.expires_at]);
+
+  async function restoreSession() {
+    setAuthLoading(true);
+    setAuthError(null);
+    try {
+      const stored = getStoredAuthSession();
+      if (!stored?.token) {
+        clearClientState();
+        return;
+      }
+      const me = await apiClient.getMe();
+      const nextSession: AuthSession = {
+        token: stored.token,
+        user: me.user,
+        expires_at: me.expires_at,
+        max_expires_at: me.max_expires_at,
+      };
+      setStoredAuthSession(nextSession);
+      if (!me.user.force_password_change) {
+        await bootstrap(nextSession);
+      } else {
+        clearAppState();
+      }
+    } catch (error) {
+      clearStoredAuthSession();
+      clearClientState(error instanceof Error ? error.message : null);
+    } finally {
+      setAuthReady(true);
+      setAuthLoading(false);
+    }
+  }
+
+  async function bootstrap(session = authSession) {
+    if (!session?.token || session.user.force_password_change) {
+      setBootstrapping(false);
+      return;
+    }
     setBootstrapping(true);
     setAppError(null);
     try {
@@ -110,6 +179,75 @@ export function useChatApp() {
       setAppError(error instanceof Error ? error.message : "Failed to load chats");
     } finally {
       setBootstrapping(false);
+    }
+  }
+
+  function clearAppState() {
+    setChats([]);
+    setArchivedChats([]);
+    setMessagesByChat({});
+    setActiveChatId(null);
+    setLibrary(null);
+    setLibraryError(null);
+    setSettings(null);
+    setSettingsDraft(null);
+    setAdminUsers([]);
+    setAdminError(null);
+    clearAppSessionState();
+  }
+
+  function clearClientState(message: string | null = null) {
+    clearAppState();
+    setAuthSession(null);
+    setAuthError(message);
+  }
+
+  async function login(username: string, password: string) {
+    setAuthLoading(true);
+    setAuthError(null);
+    try {
+      const session = await apiClient.login(username, password);
+      setStoredAuthSession(session);
+      if (!session.user.force_password_change) {
+        await bootstrap(session);
+      } else {
+        clearAppState();
+      }
+      return session;
+    } catch (error) {
+      setAuthError(error instanceof Error ? error.message : "Login failed");
+      throw error;
+    } finally {
+      setAuthReady(true);
+      setAuthLoading(false);
+    }
+  }
+
+  async function logout() {
+    try {
+      if (getStoredAuthSession()?.token) {
+        await apiClient.logout();
+      }
+    } catch {
+      // ignore logout failures while clearing the client session
+    }
+    clearStoredAuthSession();
+    clearClientState();
+  }
+
+  async function changePassword(currentPassword: string | null, newPassword: string, confirmPassword: string) {
+    setPasswordChanging(true);
+    setAuthError(null);
+    try {
+      const session = await apiClient.changePassword(currentPassword, newPassword, confirmPassword);
+      setStoredAuthSession(session);
+      await bootstrap(session);
+      return session;
+    } catch (error) {
+      setAuthError(error instanceof Error ? error.message : "Password change failed");
+      throw error;
+    } finally {
+      setPasswordChanging(false);
     }
   }
 
@@ -320,8 +458,7 @@ export function useChatApp() {
       setSettingsSuccess("Settings saved and applied live.");
       return updated;
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Failed to save settings";
-      setSettingsError(message);
+      setSettingsError(error instanceof Error ? error.message : "Failed to save settings");
       return null;
     } finally {
       setSettingsSaving(false);
@@ -332,7 +469,8 @@ export function useChatApp() {
     setLibraryLoading(true);
     setLibraryError(null);
     try {
-      setLibrary(await apiClient.listLibraryFiles());
+      const payload = await apiClient.listLibraryFiles();
+      setLibrary(payload);
     } catch (error) {
       setLibraryError(error instanceof Error ? error.message : "Failed to load library");
     } finally {
@@ -341,19 +479,25 @@ export function useChatApp() {
   }
 
   async function toggleLibraryFile(file: LibraryFile) {
+    if (!file.can_toggle_enabled) {
+      return;
+    }
     setBusyFileIds((current) => [...current, file.id]);
     setLibraryError(null);
     try {
       const updated = await apiClient.updateLibraryFile(file.id, { is_enabled: !file.is_enabled });
       setLibrary((current) =>
         current
-          ? { ...current, files: current.files.map((item) => (item.id === file.id ? updated : item)) }
+          ? {
+              ...current,
+              files: current.files.map((entry) => (entry.id === file.id ? updated : entry)),
+            }
           : current,
       );
     } catch (error) {
       setLibraryError(error instanceof Error ? error.message : "Failed to update file");
     } finally {
-      setBusyFileIds((current) => current.filter((id) => id !== file.id));
+      setBusyFileIds((current) => current.filter((value) => value !== file.id));
     }
   }
 
@@ -366,7 +510,7 @@ export function useChatApp() {
     } catch (error) {
       setLibraryError(error instanceof Error ? error.message : "Failed to delete file");
     } finally {
-      setBusyFileIds((current) => current.filter((id) => id !== fileId));
+      setBusyFileIds((current) => current.filter((value) => value !== fileId));
     }
   }
 
@@ -377,22 +521,89 @@ export function useChatApp() {
       await apiClient.uploadLibraryFiles(files, tagsByFile);
       await loadLibrary();
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Failed to upload files";
-      setLibraryError(message);
+      setLibraryError(error instanceof Error ? error.message : "Failed to upload files");
       throw error;
     } finally {
       setUploading(false);
     }
   }
 
-  const activeMessages = useMemo(() => {
-    if (!activeChatId) {
-      return [];
+  async function loadAdminUsers() {
+    if (authSession?.user.role !== "admin") {
+      return;
     }
-    return messagesByChat[activeChatId] ?? [];
-  }, [activeChatId, messagesByChat]);
+    setAdminLoading(true);
+    setAdminError(null);
+    try {
+      setAdminUsers(await apiClient.listAdminUsers());
+    } catch (error) {
+      setAdminError(error instanceof Error ? error.message : "Failed to load users");
+    } finally {
+      setAdminLoading(false);
+    }
+  }
+
+  async function createAdminUser(payload: { username: string; displayname: string; role: "user" | "admin" }) {
+    setAdminError(null);
+    const created = await apiClient.createAdminUser(payload);
+    setAdminUsers((current) => [...current, created].sort((left, right) => left.username.localeCompare(right.username)));
+    return created;
+  }
+
+  async function updateAdminUser(userId: number, payload: Partial<Pick<AdminUser, "displayname" | "role" | "status" | "force_password_change">>) {
+    setAdminBusyUserIds((current) => [...current, userId]);
+    setAdminError(null);
+    try {
+      const updated = await apiClient.updateAdminUser(userId, payload);
+      setAdminUsers((current) => current.map((user) => (user.id === userId ? updated : user)));
+      if (authSession?.user.id === userId) {
+        setStoredAuthSession({ ...authSession, user: updated });
+      }
+      return updated;
+    } catch (error) {
+      setAdminError(error instanceof Error ? error.message : "Failed to update user");
+      throw error;
+    } finally {
+      setAdminBusyUserIds((current) => current.filter((value) => value !== userId));
+    }
+  }
+
+  async function deleteAdminUser(userId: number) {
+    setAdminBusyUserIds((current) => [...current, userId]);
+    setAdminError(null);
+    try {
+      await apiClient.deleteAdminUser(userId);
+      setAdminUsers((current) => current.filter((user) => user.id !== userId));
+    } catch (error) {
+      setAdminError(error instanceof Error ? error.message : "Failed to delete user");
+      throw error;
+    } finally {
+      setAdminBusyUserIds((current) => current.filter((value) => value !== userId));
+    }
+  }
+
+  const activeMessages = useMemo(() => (activeChatId ? messagesByChat[activeChatId] ?? [] : []), [activeChatId, messagesByChat]);
 
   return {
+    authReady,
+    authLoading,
+    authError,
+    authSession,
+    currentUser: authSession?.user ?? null,
+    isAuthenticated: Boolean(authSession?.token),
+    requiresPasswordChange: Boolean(authSession?.user.force_password_change),
+    passwordChanging,
+    login,
+    logout,
+    changePassword,
+    adminUsers,
+    adminLoading,
+    adminError,
+    adminBusyUserIds,
+    loadAdminUsers,
+    createAdminUser,
+    updateAdminUser,
+    deleteAdminUser,
     bootstrapping,
     chats,
     archivedChats,
@@ -413,11 +624,7 @@ export function useChatApp() {
     settingsSaving,
     settingsError,
     settingsSuccess,
-    attachmentRules: {
-      maxFiles: ATTACHMENT_MAX_FILES,
-      allowedExtensions: ATTACHMENT_ALLOWED_EXTENSIONS,
-    },
-    bootstrap,
+    setAssistantMode,
     ensureChatLoaded,
     createChat,
     renameChat,
@@ -426,7 +633,6 @@ export function useChatApp() {
     deleteChat,
     downloadChat,
     sendMessage,
-    setAssistantMode,
     loadSettings,
     updateSettingsDraft,
     saveSettings,
@@ -434,5 +640,9 @@ export function useChatApp() {
     toggleLibraryFile,
     deleteLibraryFile,
     uploadLibraryFiles,
+    attachmentRules: {
+      maxFiles: ATTACHMENT_MAX_FILES,
+      allowedExtensions: ATTACHMENT_ALLOWED_EXTENSIONS,
+    },
   };
 }

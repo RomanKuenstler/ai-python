@@ -1,18 +1,22 @@
 import { useEffect, useRef, useState } from "react";
 import { Icon } from "../common/Icons";
-import type { Chat } from "../../types/chat";
+import type { Chat, CurrentUser } from "../../types/chat";
 import { Dialog } from "../common/Dialog";
 
 type SidebarProps = {
   chats: Chat[];
   activeChatId: string | null;
-  activeView: "chat" | "library";
+  activeView: "chat" | "library" | "admin";
+  currentUser: CurrentUser;
   onCreateChat: () => void;
   onOpenLibrary: () => void;
+  onOpenAdmin: () => void;
   onOpenArchive: () => void;
   onOpenInfo: () => void;
   onOpenHelp: () => void;
   onOpenPreferences: (tab?: "general" | "personalization" | "settings" | "archive") => void;
+  onOpenChangePassword: () => void;
+  onLogout: () => void;
   onSelectChat: (chatId: string) => void;
   onRenameChat: (chatId: string, chatName: string) => void;
   onArchiveChat: (chatId: string) => void;
@@ -24,12 +28,16 @@ export function Sidebar({
   chats,
   activeChatId,
   activeView,
+  currentUser,
   onCreateChat,
   onOpenLibrary,
+  onOpenAdmin,
   onOpenArchive,
   onOpenInfo,
   onOpenHelp,
   onOpenPreferences,
+  onOpenChangePassword,
+  onLogout,
   onSelectChat,
   onRenameChat,
   onArchiveChat,
@@ -80,6 +88,12 @@ export function Sidebar({
           <Icon name="book" className="side-nav-item-svg" />
           <span>Library</span>
         </button>
+        {currentUser.role === "admin" ? (
+          <button className={`side-nav-item${activeView === "admin" ? " active" : ""}`} type="button" onClick={onOpenAdmin}>
+            <Icon name="settings" className="side-nav-item-svg" />
+            <span>Admin</span>
+          </button>
+        ) : null}
         <button className="side-nav-item" type="button" onClick={() => onOpenPreferences("personalization")}>
           <Icon name="sparkles" className="side-nav-item-svg" />
           <span>Personalization</span>
@@ -178,10 +192,10 @@ export function Sidebar({
             aria-expanded={userMenuOpen}
             onClick={() => setUserMenuOpen((current) => !current)}
           >
-            <div className="side-nav-avatar-placeholder">LR</div>
+            <div className="side-nav-avatar-placeholder">{currentUser.displayname.slice(0, 2).toUpperCase()}</div>
             <div className="side-nav-user-meta">
-              <strong>Test User</strong>
-              <small>test</small>
+              <strong>{currentUser.displayname}</strong>
+              <small>{currentUser.username}</small>
             </div>
             <div className="side-nav-user-menu-icon">
               <Icon name="dots" />
@@ -206,11 +220,11 @@ export function Sidebar({
                 Archive
               </button>
               <div className="side-nav-user-menu-divider" />
-              <button className="chat-item-actions-option" type="button" disabled>
+              <button className="chat-item-actions-option" type="button" onClick={onOpenChangePassword}>
                 <Icon name="key" />
                 Change Password
               </button>
-              <button className="chat-item-actions-option delete" type="button" disabled>
+              <button className="chat-item-actions-option delete" type="button" onClick={onLogout}>
                 <Icon name="logout" />
                 Logout
               </button>

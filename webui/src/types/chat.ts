@@ -1,3 +1,26 @@
+export type Role = "user" | "admin";
+
+export type CurrentUser = {
+  id: number;
+  username: string;
+  displayname: string;
+  role: Role;
+  status: "active" | "inactive" | string;
+  force_password_change: boolean;
+};
+
+export type AuthSession = {
+  token: string;
+  expires_at: string;
+  max_expires_at: string;
+  user: CurrentUser;
+};
+
+export type AdminUser = CurrentUser & {
+  created_at: string;
+  updated_at: string;
+};
+
 export type Chat = {
   id: string;
   chat_name: string;
@@ -97,6 +120,10 @@ export type LibraryFile = {
   tags: string[];
   is_embedded: boolean;
   is_enabled: boolean;
+  is_system: boolean;
+  uploaded_by_user_id: number | null;
+  can_delete: boolean;
+  can_toggle_enabled: boolean;
   processing_status: string;
   updated_at: string;
 };

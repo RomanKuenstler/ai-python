@@ -5,18 +5,21 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from services.common.config import Settings
-from services.embedder.embedding import EmbeddingClient
+from services.common.models import UserAccount
 from services.embedder.chunking import Chunker
+from services.embedder.embedding import EmbeddingClient
 from services.embedder.postgres_client import EmbedderPostgresClient
 from services.embedder.processor import FileProcessor
 from services.embedder.qdrant_client import EmbedderQdrantClient
-from services.retriever.chat_history import ChatHistoryService
 from services.retriever.attachment_client import AttachmentProcessingClient
+from services.retriever.auth import AuthContext, AuthManager
+from services.retriever.chat_history import ChatHistoryService
 from services.retriever.llm_client import LlmClient
 from services.retriever.prompt_builder import PromptBuilder
 from services.retriever.qdrant_client import RetrieverQdrantClient
 from services.retriever.repositories.chat_repository import ChatRepository
 from services.retriever.retriever import RetrievalService
+from services.retriever.schemas.auth import AdminUserRead, AuthLoginResponse, AuthMeResponse, PasswordChangeResponse
 from services.retriever.schemas.chat import ChatDownloadMessageRead, ChatDownloadResponse, SettingsRead, SettingsUpdateRequest
 from services.retriever.services.chat_naming import generate_chat_name
 from services.retriever.services.library_manager import LibraryManager, UploadFilePayload
@@ -40,6 +43,7 @@ class RetrieverDependencies:
     library_manager: LibraryManager
     attachment_client: AttachmentProcessingClient
     settings: Settings
+    auth_manager: AuthManager | None = None
 
 
 class RetrieverAppService:
@@ -51,30 +55,75 @@ class RetrieverAppService:
         self.llm_client = deps.llm_client
         self.library_manager = deps.library_manager
         self.attachment_client = deps.attachment_client
+        self.auth_manager = deps.auth_manager
         self.settings = deps.settings
-        self._load_runtime_settings()
+        if self.auth_manager is not None:
+            self.auth_manager.bootstrap_users()
 
-    def create_chat(self):
-        chat = self.chat_repository.create_chat(generate_chat_name())
+    def login(self, username: str, password: str) -> AuthLoginResponse:
+        assert self.auth_manager is not None
+        return self.auth_manager.login(username, password)
+
+    def me(self, auth: AuthContext) -> AuthMeResponse:
+        assert self.auth_manager is not None
+        return self.auth_manager.me(auth)
+
+    def logout(self, auth: AuthContext) -> None:
+        assert self.auth_manager is not None
+        self.auth_manager.logout(auth.session.id)
+
+    def change_password(self, auth: AuthContext, *, current_password: str | None, new_password: str, confirm_password: str) -> PasswordChangeResponse:
+        assert self.auth_manager is not None
+        return self.auth_manager.change_password(
+            auth=auth,
+            current_password=current_password,
+            new_password=new_password,
+            confirm_password=confirm_password,
+        )
+
+    def list_admin_users(self, auth: AuthContext) -> list[AdminUserRead]:
+        assert self.auth_manager is not None
+        self.auth_manager.require_admin(auth)
+        return self.auth_manager.list_users()
+
+    def create_admin_user(self, auth: AuthContext, *, username: str, displayname: str, role: str) -> AdminUserRead:
+        assert self.auth_manager is not None
+        self.auth_manager.require_admin(auth)
+        return self.auth_manager.create_user(username=username, displayname=displayname, role=role)
+
+    def update_admin_user(self, auth: AuthContext, user_id: int, **fields: object) -> AdminUserRead | None:
+        assert self.auth_manager is not None
+        self.auth_manager.require_admin(auth)
+        if auth.user.id == user_id and fields.get("status") == "inactive":
+            raise ValueError("Admin cannot deactivate own account")
+        return self.auth_manager.update_user(user_id, **fields)
+
+    def delete_admin_user(self, auth: AuthContext, user_id: int) -> AdminUserRead | None:
+        assert self.auth_manager is not None
+        self.auth_manager.require_admin(auth)
+        return self.auth_manager.delete_user(actor=auth, user_id=user_id)
+
+    def create_chat(self, user: UserAccount):
+        chat = self.chat_repository.create_chat(user.id, generate_chat_name())
         return map_chat(chat)
 
-    def list_chats(self):
-        return [map_chat(chat) for chat in self.chat_repository.list_chats(archived=False)]
+    def list_chats(self, user: UserAccount):
+        return [map_chat(chat) for chat in self.chat_repository.list_chats(user.id, archived=False)]
 
-    def list_archived_chats(self):
-        return [map_chat(chat) for chat in self.chat_repository.list_chats(archived=True)]
+    def list_archived_chats(self, user: UserAccount):
+        return [map_chat(chat) for chat in self.chat_repository.list_chats(user.id, archived=True)]
 
-    def get_chat(self, chat_id: str):
-        chat = self.chat_repository.get_chat(chat_id)
+    def get_chat(self, user: UserAccount, chat_id: str):
+        chat = self.chat_repository.get_chat(user.id, chat_id)
         if chat is None:
             return None
         return map_chat(chat)
 
-    def get_chat_messages(self, chat_id: str):
-        messages = self.chat_repository.list_messages(chat_id)
+    def get_chat_messages(self, user: UserAccount, chat_id: str):
+        messages = self.chat_repository.list_messages(user.id, chat_id)
         assistant_ids = [message.id for message in messages if message.role == "assistant"]
         message_ids = [message.id for message in messages]
-        sources_by_message = self.chat_repository.get_sources_by_assistant_message(assistant_ids)
+        sources_by_message = self.chat_repository.get_sources_by_assistant_message(user.id, assistant_ids)
         attachments_by_message = self.chat_repository.get_attachments_by_message_ids(message_ids)
         return [
             map_message(message, sources_by_message.get(message.id)).model_copy(
@@ -83,42 +132,42 @@ class RetrieverAppService:
             for message in messages
         ]
 
-    def rename_chat(self, chat_id: str, chat_name: str):
+    def rename_chat(self, user: UserAccount, chat_id: str, chat_name: str):
         normalized_name = chat_name.strip()
         if not normalized_name:
             raise ValueError("Chat name cannot be empty")
-        chat = self.chat_repository.rename_chat(chat_id, normalized_name)
+        chat = self.chat_repository.rename_chat(user.id, chat_id, normalized_name)
         if chat is None:
             return None
         return map_chat(chat)
 
-    def delete_chat(self, chat_id: str):
-        chat = self.chat_repository.delete_chat(chat_id)
+    def delete_chat(self, user: UserAccount, chat_id: str):
+        chat = self.chat_repository.delete_chat(user.id, chat_id)
         if chat is None:
             return None
         return map_chat(chat)
 
-    def archive_chat(self, chat_id: str):
-        chat = self.chat_repository.set_chat_archived(chat_id, True)
+    def archive_chat(self, user: UserAccount, chat_id: str):
+        chat = self.chat_repository.set_chat_archived(user.id, chat_id, True)
         if chat is None:
             return None
         return map_chat(chat)
 
-    def unarchive_chat(self, chat_id: str):
-        chat = self.chat_repository.set_chat_archived(chat_id, False)
+    def unarchive_chat(self, user: UserAccount, chat_id: str):
+        chat = self.chat_repository.set_chat_archived(user.id, chat_id, False)
         if chat is None:
             return None
         return map_chat(chat)
 
-    def download_chat(self, chat_id: str):
-        chat = self.chat_repository.get_chat(chat_id)
+    def download_chat(self, user: UserAccount, chat_id: str):
+        chat = self.chat_repository.get_chat(user.id, chat_id)
         if chat is None:
             return None
 
-        messages = self.chat_repository.list_messages(chat_id)
+        messages = self.chat_repository.list_messages(user.id, chat_id)
         assistant_ids = [message.id for message in messages if message.role == "assistant"]
         message_ids = [message.id for message in messages]
-        sources_by_message = self.chat_repository.get_sources_by_assistant_message(assistant_ids)
+        sources_by_message = self.chat_repository.get_sources_by_assistant_message(user.id, assistant_ids)
         attachments_by_message = self.chat_repository.get_attachments_by_message_ids(message_ids)
 
         return ChatDownloadResponse(
@@ -139,21 +188,22 @@ class RetrieverAppService:
             ],
         )
 
-    def list_library_files(self):
-        return self.library_manager.list_files()
+    def list_library_files(self, user: UserAccount):
+        return self.library_manager.list_files(user)
 
-    def update_library_file(self, file_id: int, *, is_enabled: bool):
-        return self.library_manager.update_file_state(file_id, is_enabled=is_enabled)
+    def update_library_file(self, user: UserAccount, file_id: int, *, is_enabled: bool):
+        return self.library_manager.update_file_state(user, file_id, is_enabled=is_enabled)
 
-    def delete_library_file(self, file_id: int):
-        return self.library_manager.delete_file(file_id)
+    def delete_library_file(self, user: UserAccount, file_id: int):
+        return self.library_manager.delete_file(user, file_id)
 
-    def upload_library_files(self, uploads: list[UploadFilePayload], tags_by_file_raw: str | None):
+    def upload_library_files(self, user: UserAccount, uploads: list[UploadFilePayload], tags_by_file_raw: str | None):
         tags_by_file = self.library_manager.parse_tags_mapping(tags_by_file_raw)
-        files = self.library_manager.upload_files(uploads, tags_by_file)
+        files = self.library_manager.upload_files(user, uploads, tags_by_file)
         return {"files": files}
 
-    def get_settings(self) -> SettingsRead:
+    def get_settings(self, user: UserAccount) -> SettingsRead:
+        self._load_runtime_settings(user)
         return SettingsRead(
             chat_history_messages_count=self.history_service.history_limit,
             max_similarities=self.retrieval_service.max_results,
@@ -163,7 +213,7 @@ class RetrieverAppService:
             available_assistant_modes=self.settings.available_assistant_modes,
         )
 
-    def update_settings(self, payload: SettingsUpdateRequest) -> SettingsRead:
+    def update_settings(self, user: UserAccount, payload: SettingsUpdateRequest) -> SettingsRead:
         if payload.min_similarities > payload.max_similarities:
             raise ValueError("min similarities cannot be greater than max similarities")
 
@@ -179,13 +229,91 @@ class RetrieverAppService:
             "similarity_score_threshold": payload.similarity_score_threshold,
         }
         for key, value in persisted_values.items():
-            self.chat_repository.upsert_setting(key, json.dumps(value))
-        return self.get_settings()
+            self.chat_repository.upsert_setting(user.id, key, json.dumps(value))
+        return self.get_settings(user)
 
     def send_message(
         self,
+        user: UserAccount | str,
+        chat_id: str | None = None,
+        user_content: str | None = None,
+        attachments: list[tuple[str, bytes]] | None = None,
+        assistant_mode: str | None = None,
+    ):
+        if isinstance(user, UserAccount):
+            return self._send_message_for_user(
+                user,
+                chat_id or "",
+                user_content or "",
+                attachments=attachments,
+                assistant_mode=assistant_mode,
+            )
+        return self._send_message_legacy(
+            user,
+            chat_id or "",
+            attachments=attachments,
+            assistant_mode=assistant_mode,
+        )
+
+    def _send_message_for_user(
+        self,
+        user: UserAccount,
         chat_id: str,
         user_content: str,
+        *,
+        attachments: list[tuple[str, bytes]] | None = None,
+        assistant_mode: str | None = None,
+    ):
+        chat = self.chat_repository.get_chat(user.id, chat_id)
+        if chat is None:
+            return None
+
+        self._load_runtime_settings(user)
+        resolved_mode = self._resolve_assistant_mode(assistant_mode)
+        processed_attachments = self._process_attachments(attachments or [])
+        user_message = self.chat_repository.create_message(
+            user.id,
+            chat_id,
+            "user",
+            user_content,
+            has_attachments=bool(processed_attachments),
+        )
+        if processed_attachments:
+            self.chat_repository.add_message_attachments(user_message.id, processed_attachments)
+        history = self.history_service.fetch(chat_id, user_id=user.id, exclude_message_id=user_message.id)
+        retrieved_chunks = self.retrieval_service.retrieve(user_content, user_id=user.id, is_admin=user.role == "admin")
+        response = self._generate_response(
+            assistant_mode=resolved_mode,
+            user_content=user_content,
+            history=history,
+            retrieved_chunks=retrieved_chunks,
+            processed_attachments=processed_attachments,
+        )
+        assistant_message = self.chat_repository.create_message(user.id, chat_id, "assistant", response)
+        self.chat_repository.create_retrieval_logs(
+            assistant_message_id=assistant_message.id,
+            user_message_id=user_message.id,
+            chat_id=chat_id,
+            user_id=user.id,
+            used_chunks=retrieved_chunks,
+        )
+
+        return {
+            "chat_id": chat_id,
+            "user_message": map_message(user_message).model_copy(
+                update={"attachments": [map_attachment(item) for item in processed_attachments]}
+            ),
+            "assistant_message": map_message(assistant_message),
+            "assistant_mode": resolved_mode,
+            "sources": [map_source_from_chunk(chunk) for chunk in retrieved_chunks],
+            "attachments_used": [map_attachment(item) for item in processed_attachments],
+        }
+
+    def _send_message_legacy(
+        self,
+        chat_id: str,
+        user_content: str,
+        *,
         attachments: list[tuple[str, bytes]] | None = None,
         assistant_mode: str | None = None,
     ):
@@ -278,9 +406,9 @@ class RetrieverAppService:
             raise ValueError(f"Unsupported assistant mode: {mode}")
         return mode
 
-    def _load_runtime_settings(self) -> None:
+    def _load_runtime_settings(self, user: UserAccount) -> None:
         stored_values: dict[str, object] = {}
-        for record in self.chat_repository.list_settings():
+        for record in self.chat_repository.list_settings(user.id):
             if record.key not in RUNTIME_SETTING_KEYS:
                 continue
             try:
@@ -290,18 +418,18 @@ class RetrieverAppService:
 
         self.history_service.history_limit = max(
             1,
-            int(stored_values.get("chat_history_messages_count", self.history_service.history_limit)),
+            int(stored_values.get("chat_history_messages_count", self.settings.history_limit)),
         )
         self.retrieval_service.min_results = max(
             1,
-            int(stored_values.get("min_similarities", self.retrieval_service.min_results)),
+            int(stored_values.get("min_similarities", self.settings.retrieval_min_results)),
         )
         self.retrieval_service.max_results = max(
             self.retrieval_service.min_results,
-            int(stored_values.get("max_similarities", self.retrieval_service.max_results)),
+            int(stored_values.get("max_similarities", self.settings.retrieval_max_results)),
         )
         self.retrieval_service.score_threshold = min(
-            max(float(stored_values.get("similarity_score_threshold", self.retrieval_service.score_threshold)), 0.0),
+            max(float(stored_values.get("similarity_score_threshold", self.settings.retrieval_score_threshold)), 0.0),
             1.0,
         )
 
@@ -332,6 +460,7 @@ def build_retriever_app_service(
     embedder_postgres_client = EmbedderPostgresClient(database_url)
     embedder_postgres_client.initialize()
     chat_repository = ChatRepository(postgres_client)
+    auth_manager = AuthManager(repository=chat_repository, settings=settings)
     data_dir = Path(settings.data_dir)
     library_processor = FileProcessor(
         data_dir=data_dir,
@@ -372,6 +501,7 @@ def build_retriever_app_service(
         ),
         library_manager=LibraryManager(data_dir=data_dir, processor=library_processor, settings=settings),
         attachment_client=AttachmentProcessingClient(settings.embedder_service_url),
+        auth_manager=auth_manager,
         settings=settings,
     )
     return RetrieverAppService(deps)

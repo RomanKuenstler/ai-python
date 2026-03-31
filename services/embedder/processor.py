@@ -39,6 +39,13 @@ class FileProcessor:
         file_hash = compute_sha256(file_path)
         relative_path = str(file_path.relative_to(self.data_dir))
         resolved_tags = self.resolve_tags(relative_path, file_path.name)
+        path_parts = Path(relative_path).parts
+        uploaded_by_user_id = None
+        is_system = len(path_parts) == 1
+        if len(path_parts) >= 3 and path_parts[0] == "uploads":
+            owner = self.postgres_client.get_user_by_username(path_parts[1])
+            uploaded_by_user_id = owner.id if owner is not None else None
+            is_system = False
         processor = self.registry.for_path(file_path)
         extraction = processor.process(file_path=file_path, relative_path=relative_path, tags=resolved_tags)
         chunk_payloads = self.chunker.split(extraction, relative_path) if extraction.text.strip() else []
@@ -96,6 +103,8 @@ class FileProcessor:
                 "processing_flags": extraction.processing_flags,
                 "ocr_used": bool(extraction.processing_flags.get("ocr_used", False)),
                 "tags": resolved_tags,
+                "uploaded_by_user_id": uploaded_by_user_id,
+                "is_system": is_system,
             },
             chunks=tagged_chunks,
         )

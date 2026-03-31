@@ -141,6 +141,7 @@ export function LibraryPage({
                       <span className={`library-extension-chip ${extensionTone(file.extension || file.file_type)}`}>
                         {file.extension || file.file_type}
                       </span>
+                      {file.is_system ? <span className="library-tag-line">system</span> : null}
                     </div>
                     <div className="library-status-cell">
                       <span className={`status-icon-pill ${file.is_embedded ? "enabled" : "disabled"}`}>
@@ -155,7 +156,7 @@ export function LibraryPage({
                       <button
                         className="library-toggle-button"
                         type="button"
-                        disabled={busySet.has(file.id)}
+                        disabled={busySet.has(file.id) || !file.can_toggle_enabled}
                         onClick={() => onToggleFile(file)}
                         aria-label={file.is_enabled ? `Disable ${file.file_name}` : `Enable ${file.file_name}`}
                       >
@@ -164,7 +165,7 @@ export function LibraryPage({
                       <button
                         className="library-delete-button"
                         type="button"
-                        disabled={busySet.has(file.id)}
+                        disabled={busySet.has(file.id) || !file.can_delete}
                         onClick={() => setDeleteTarget(file)}
                         aria-label={`Delete ${file.file_name}`}
                       >

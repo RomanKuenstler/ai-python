@@ -57,7 +57,12 @@ def map_message(message: ChatMessage, sources: list[RetrievalLog] | None = None)
     )
 
 
-def map_library_file(record: FileRecord) -> LibraryFileRead:
+def map_library_file(
+    record: FileRecord,
+    *,
+    can_delete: bool = False,
+    can_toggle_enabled: bool = True,
+) -> LibraryFileRead:
     return LibraryFileRead(
         id=record.id,
         file_name=record.file_name,
@@ -69,6 +74,10 @@ def map_library_file(record: FileRecord) -> LibraryFileRead:
         tags=list(record.tags or []),
         is_embedded=record.is_embedded,
         is_enabled=record.is_enabled,
+        is_system=record.is_system,
+        uploaded_by_user_id=record.uploaded_by_user_id,
+        can_delete=can_delete,
+        can_toggle_enabled=can_toggle_enabled,
         processing_status=record.processing_status,
         updated_at=record.updated_at,
     )

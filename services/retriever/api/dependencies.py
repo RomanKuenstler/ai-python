@@ -3,7 +3,10 @@ from __future__ import annotations
 from functools import lru_cache
 from pathlib import Path
 
+from fastapi import Depends, Header, HTTPException, Response
+
 from services.common.config import get_settings
+from services.retriever.auth import AuthContext
 from services.retriever.services.retriever_service import RetrieverAppService, build_retriever_app_service
 
 
@@ -29,3 +32,28 @@ def get_retriever_service() -> RetrieverAppService:
         history_limit=settings.history_limit,
         settings=settings,
     )
+
+
+def get_auth_context(
+    response: Response,
+    authorization: str | None = Header(default=None),
+    service: RetrieverAppService = Depends(get_retriever_service),
+) -> AuthContext:
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Authentication required")
+    token = authorization[7:].strip()
+    try:
+        auth = service.auth_manager.authenticate_token(token)
+    except PermissionError as error:
+        raise HTTPException(status_code=401, detail=str(error)) from error
+    if auth.refreshed_token:
+        response.headers["X-Auth-Token"] = auth.refreshed_token
+        response.headers["X-Auth-Expires-At"] = auth.session.expires_at.isoformat()
+        response.headers["X-Auth-Max-Expires-At"] = auth.session.max_expires_at.isoformat()
+    return auth
+
+
+def get_app_auth_context(auth: AuthContext = Depends(get_auth_context)) -> AuthContext:
+    if auth.user.force_password_change:
+        raise HTTPException(status_code=403, detail="Password change required")
+    return auth

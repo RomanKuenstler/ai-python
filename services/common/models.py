@@ -3,12 +3,45 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Index, Integer, JSON, String, Text, func
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Index, Integer, JSON, String, Text, UniqueConstraint, func
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
 class Base(DeclarativeBase):
     pass
+
+
+class UserAccount(Base):
+    __tablename__ = "users"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    username: Mapped[str] = mapped_column(String(128), unique=True, nullable=False)
+    displayname: Mapped[str] = mapped_column(String(255), nullable=False)
+    password_hash: Mapped[str] = mapped_column(String(512), nullable=False)
+    role: Mapped[str] = mapped_column(String(32), nullable=False, default="user")
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="active")
+    force_password_change: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
+    )
+
+
+class UserSessionRecord(Base):
+    __tablename__ = "user_sessions"
+
+    id: Mapped[str] = mapped_column(String(128), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    issued_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    last_refreshed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    last_activity_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    max_expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
+    )
 
 
 class FileRecord(Base):
@@ -42,6 +75,8 @@ class FileRecord(Base):
     processing_flags: Mapped[dict] = mapped_column(JSON, default=dict)
     ocr_used: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     tags: Mapped[list[str]] = mapped_column(JSON, default=list)
+    uploaded_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    is_system: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     last_processed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
@@ -81,6 +116,7 @@ class ChatSession(Base):
     __tablename__ = "chats"
 
     id: Mapped[str] = mapped_column(String(128), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True)
     chat_name: Mapped[str] = mapped_column(String(255), nullable=False)
     is_archived: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
@@ -91,9 +127,10 @@ class ChatSession(Base):
 
 class ChatMessage(Base):
     __tablename__ = "chat_messages"
-    __table_args__ = (Index("ix_chat_messages_session_id_created_at", "session_id", "created_at"),)
+    __table_args__ = (Index("ix_chat_messages_session_id_created_at", "session_id", "created_at"), Index("ix_chat_messages_user_id_created_at", "user_id", "created_at"))
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True)
     session_id: Mapped[str] = mapped_column(String(128), nullable=False)
     role: Mapped[str] = mapped_column(String(32), nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
@@ -122,6 +159,7 @@ class RetrievalLog(Base):
     __tablename__ = "retrieval_logs"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True)
     assistant_message_id: Mapped[int] = mapped_column(ForeignKey("chat_messages.id", ondelete="CASCADE"), nullable=False)
     user_message_id: Mapped[int] = mapped_column(ForeignKey("chat_messages.id", ondelete="CASCADE"), nullable=False)
     session_id: Mapped[str] = mapped_column(String(128), nullable=False)
@@ -140,10 +178,25 @@ class RetrievalLog(Base):
 
 class SettingRecord(Base):
     __tablename__ = "settings"
+    __table_args__ = (UniqueConstraint("user_id", "key", name="uq_settings_user_key"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    key: Mapped[str] = mapped_column(String(128), nullable=False, unique=True)
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True)
+    key: Mapped[str] = mapped_column(String(128), nullable=False)
     value: Mapped[str] = mapped_column(Text, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
+    )
+
+
+class UserFileSetting(Base):
+    __tablename__ = "user_file_settings"
+    __table_args__ = (UniqueConstraint("user_id", "file_id", name="uq_user_file_settings_user_file"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    file_id: Mapped[int] = mapped_column(ForeignKey("files.id", ondelete="CASCADE"), nullable=False, index=True)
+    is_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
     )

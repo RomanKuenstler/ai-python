@@ -188,3 +188,30 @@ Request payload:
 ```
 
 This endpoint extracts text and returns ephemeral attachment metadata. It does not persist vectors or file content.
+# API
+
+## Authentication
+
+- `POST /api/auth/login`
+- `POST /api/auth/logout`
+- `GET /api/auth/me`
+- `POST /api/auth/change-password`
+
+## Admin
+
+- `GET /api/admin/users`
+- `POST /api/admin/users`
+- `PATCH /api/admin/users/{id}`
+- `DELETE /api/admin/users/{id}`
+
+## Authenticated App Endpoints
+
+All existing chat, library, and settings endpoints now require a bearer token.
+
+Responses may include:
+
+- `X-Auth-Token`
+- `X-Auth-Expires-At`
+- `X-Auth-Max-Expires-At`
+
+When present, the frontend should replace the stored token with the refreshed one.
