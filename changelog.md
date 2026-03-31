@@ -46,3 +46,11 @@
 - Introduced Alembic migrations and switched database initialization to migration-driven schema upgrades.
 - Reworked the web UI toward the Step 5 reference structure with attachment previews and disabled placeholder controls for unimplemented areas.
 - Updated environment defaults, testing guidance, API/frontend docs, and repository ignore rules for a cleaner project root.
+
+## 2026-03-30 01:00 UTC
+
+- Implemented Step 7 as a full web UI restyle pass against the reference UI without changing product scope.
+- Reworked the shared visual system with centralized color, radius, border, shadow, and transition tokens.
+- Restyled the fixed shell, sidebar, chat layout, composer, message rendering, source popovers, library sections, dialogs, and preferences modal for closer reference parity.
+- Refined the preferences architecture into a wide tabbed modal and aligned library and archive surfaces with the same design language.
+- Updated frontend, testing, and new design-system documentation for the Step 7 styling model and verification workflow.

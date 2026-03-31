@@ -8,12 +8,10 @@ type ChatViewProps = {
   loadingMessages: boolean;
   error: string | null;
   assistantMode: AssistantMode;
-  availableModes: AssistantMode[];
   attachmentRules: {
     maxFiles: number;
     allowedExtensions: string[];
   };
-  onAssistantModeChange: (mode: AssistantMode) => void;
   onSend: (value: string, attachments: File[], mode: AssistantMode) => Promise<void>;
 };
 
@@ -23,33 +21,21 @@ export function ChatView({
   loadingMessages,
   error,
   assistantMode,
-  availableModes,
   attachmentRules,
-  onAssistantModeChange,
   onSend,
 }: ChatViewProps) {
   return (
     <section className="chat-column">
-      <div className="page-heading">
-        <div>
-          <p className="section-label">Grounded answers</p>
-          <h2 className="page-title">Chat</h2>
-        </div>
-        {error ? <p className="chat-error">{error}</p> : null}
-      </div>
-      <div className="chat-thread-card chat">
+      {error ? <p className="chat-error chat-error-banner">{error}</p> : null}
+      <div className="chat-thread-card chat" aria-label="Conversation">
         <MessageList messages={messages} loadingMessages={loadingMessages} />
       </div>
-      <div className="composer-dock">
-        <ChatInput
-          disabled={sending}
-          assistantMode={assistantMode}
-          availableModes={availableModes}
-          attachmentRules={attachmentRules}
-          onAssistantModeChange={onAssistantModeChange}
-          onSend={onSend}
-        />
-      </div>
+      <ChatInput
+        disabled={sending}
+        assistantMode={assistantMode}
+        attachmentRules={attachmentRules}
+        onSend={onSend}
+      />
     </section>
   );
 }

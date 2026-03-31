@@ -26,8 +26,9 @@ export function ChatPage() {
 
   return (
     <AppShell
-      onOpenArchive={() => undefined}
-      onOpenPreferences={() => undefined}
+      assistantMode={assistantMode}
+      availableModes={settings?.available_assistant_modes ?? ["simple", "refine"]}
+      onAssistantModeChange={setAssistantMode}
       sidebar={
         <Sidebar
           chats={chats}
@@ -53,9 +54,7 @@ export function ChatPage() {
           loadingMessages={loadingMessages}
           error={appError}
           assistantMode={assistantMode}
-          availableModes={settings?.available_assistant_modes ?? ["simple", "refine"]}
           attachmentRules={attachmentRules}
-          onAssistantModeChange={setAssistantMode}
           onSend={sendMessage}
         />
       }

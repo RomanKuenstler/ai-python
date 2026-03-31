@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { Icon } from "../common/Icons";
 import type { Chat } from "../../types/chat";
 import { Dialog } from "../common/Dialog";
 
@@ -72,17 +73,20 @@ export function Sidebar({
     <div className="side-nav-inner">
       <div className="side-nav-top">
         <button className="side-nav-item" type="button" onClick={onCreateChat}>
-          New chat
+          <span className="side-nav-item-icon">+</span>
+          <span>New chat</span>
         </button>
         <button className={`side-nav-item${activeView === "library" ? " active" : ""}`} type="button" onClick={onOpenLibrary}>
-          Library
+          <Icon name="book" className="side-nav-item-svg" />
+          <span>Library</span>
         </button>
-        <button className="side-nav-item" type="button" onClick={onOpenArchive}>
-          Archive chats
+        <button className="side-nav-item" type="button" onClick={() => onOpenPreferences("personalization")}>
+          <Icon name="sparkles" className="side-nav-item-svg" />
+          <span>Personalization</span>
         </button>
       </div>
 
-      <p className="side-nav-headline">Chats</p>
+      <p className="side-nav-headline">Your chats</p>
 
       <div className="side-nav-chat-list" aria-label="Chats">
         {chats.map((chat) => (
@@ -106,7 +110,7 @@ export function Sidebar({
                   setMenuChatId((current) => (current === chat.id ? null : chat.id));
                 }}
               >
-                ...
+                <Icon name="dots" className="chat-menu-dots" />
               </button>
               {menuChatId === chat.id ? (
                 <div className="chat-item-actions-menu" role="menu">
@@ -119,7 +123,12 @@ export function Sidebar({
                       setMenuChatId(null);
                     }}
                   >
+                    <Icon name="edit" />
                     Rename
+                  </button>
+                  <button className="chat-item-actions-option" type="button" disabled>
+                    <Icon name="filter" />
+                    Filter
                   </button>
                   <button
                     className="chat-item-actions-option"
@@ -129,6 +138,7 @@ export function Sidebar({
                       setMenuChatId(null);
                     }}
                   >
+                    <Icon name="archive" />
                     Archive
                   </button>
                   <button
@@ -139,6 +149,7 @@ export function Sidebar({
                       setMenuChatId(null);
                     }}
                   >
+                    <Icon name="download" />
                     Download
                   </button>
                   <button
@@ -149,6 +160,7 @@ export function Sidebar({
                       setMenuChatId(null);
                     }}
                   >
+                    <Icon name="trash" />
                     Delete
                   </button>
                 </div>
@@ -168,24 +180,39 @@ export function Sidebar({
           >
             <div className="side-nav-avatar-placeholder">LR</div>
             <div className="side-nav-user-meta">
-              <strong>Local User</strong>
-              <small>Step 6 controls enabled</small>
+              <strong>Test User</strong>
+              <small>test</small>
             </div>
-            <div className="side-nav-user-menu-icon">...</div>
+            <div className="side-nav-user-menu-icon">
+              <Icon name="dots" />
+            </div>
           </button>
           {userMenuOpen ? (
-            <div className="user-menu-dropdown" role="menu">
+            <div className="user-menu-dropdown side-nav-user-menu" role="menu">
               <button className="chat-item-actions-option" type="button" onClick={onOpenInfo}>
+                <Icon name="info" />
                 Info
               </button>
               <button className="chat-item-actions-option" type="button" onClick={onOpenHelp}>
+                <Icon name="help" />
                 Help
               </button>
               <button className="chat-item-actions-option" type="button" onClick={() => onOpenPreferences("settings")}>
+                <Icon name="settings" />
                 Preferences
               </button>
-              <button className="chat-item-actions-option" type="button" onClick={() => onOpenPreferences("personalization")}>
-                Personalization
+              <button className="chat-item-actions-option" type="button" onClick={onOpenArchive}>
+                <Icon name="archive" />
+                Archive
+              </button>
+              <div className="side-nav-user-menu-divider" />
+              <button className="chat-item-actions-option" type="button" disabled>
+                <Icon name="key" />
+                Change Password
+              </button>
+              <button className="chat-item-actions-option delete" type="button" disabled>
+                <Icon name="logout" />
+                Logout
               </button>
             </div>
           ) : null}
@@ -194,8 +221,9 @@ export function Sidebar({
 
       {renameTarget ? (
         <Dialog
-          title="Rename Chat"
+          title="Rename"
           onClose={() => setRenameTarget(null)}
+          className="dialog-compact rename-dialog"
           actions={
             <>
               <button className="secondary-button" type="button" onClick={() => setRenameTarget(null)}>
@@ -221,8 +249,9 @@ export function Sidebar({
 
       {deleteTarget ? (
         <Dialog
-          title="Delete Chat"
+          title="Delete chat?"
           onClose={() => setDeleteTarget(null)}
+          className="dialog-compact delete-chat-dialog"
           actions={
             <>
               <button className="secondary-button" type="button" onClick={() => setDeleteTarget(null)}>

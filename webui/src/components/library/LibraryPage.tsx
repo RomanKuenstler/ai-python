@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { Icon } from "../common/Icons";
 import type { LibraryFile, LibraryResponse } from "../../types/chat";
 import { Dialog } from "../common/Dialog";
 import { UploadDialog } from "./UploadDialog";
@@ -66,35 +67,27 @@ export function LibraryPage({
 
   return (
     <section className="chat-column library-column">
-      <div className="page-heading">
-        <div>
-          <p className="section-label">Managed knowledge base</p>
-          <h2 className="page-title">Library</h2>
-        </div>
-        {error ? <p className="chat-error">{error}</p> : null}
-      </div>
+      {error ? <p className="chat-error chat-error-banner">{error}</p> : null}
 
-      <div className="library-summary-table">
-        <div className="library-summary-head">
-          <span>Total files</span>
-          <span>Embedded files</span>
-          <span>Total chunks</span>
+      <section className="info-group-card library-summary-card">
+        <h4>Knowledge Base</h4>
+        <div className="library-summary-table">
+          <div className="library-summary-head">
+            <span>Total files</span>
+            <span>Embedded files</span>
+            <span>Total chunks</span>
+          </div>
+          <div className="library-summary-row">
+            <strong>{library?.summary.total_files ?? 0}</strong>
+            <strong>{library?.summary.embedded_files ?? 0}</strong>
+            <strong>{library?.summary.total_chunks ?? 0}</strong>
+          </div>
         </div>
-        <div className="library-summary-row">
-          <strong>{library?.summary.total_files ?? 0}</strong>
-          <strong>{library?.summary.embedded_files ?? 0}</strong>
-          <strong>{library?.summary.total_chunks ?? 0}</strong>
-        </div>
-      </div>
+      </section>
 
-      <div className="library-table-card">
+      <section className="info-group-card library-table-card">
         <div className="library-table-header">
-          <button className="restart-button library-upload-button" type="button" onClick={() => setUploadOpen(true)}>
-            Upload files
-          </button>
-          <button className="secondary-button" type="button" disabled>
-            Bulk actions
-          </button>
+          <h4>Files</h4>
         </div>
 
         <div className="library-table">
@@ -127,8 +120,8 @@ export function LibraryPage({
                   <div key={file.id} className="library-table-row">
                     <div className="library-path">{file.file_name}</div>
                     <div className="library-status-cell">
-                      <span className={`status-pill ${file.is_enabled ? "enabled" : "disabled"}`}>
-                        {file.is_enabled ? "Active" : "Disabled"}
+                      <span className={`status-icon-pill ${file.is_enabled ? "enabled" : "disabled"}`}>
+                        <Icon name={file.is_enabled ? "check" : "ban"} />
                       </span>
                     </div>
                     <div className="library-tags-cell">
@@ -150,8 +143,8 @@ export function LibraryPage({
                       </span>
                     </div>
                     <div className="library-status-cell">
-                      <span className={`status-pill ${file.is_embedded ? "enabled" : "disabled"}`}>
-                        {file.is_embedded ? "Yes" : "No"}
+                      <span className={`status-icon-pill ${file.is_embedded ? "enabled" : "disabled"}`}>
+                        {file.is_embedded ? <Icon name="check" /> : <span className="status-empty">-</span>}
                       </span>
                     </div>
                     <div className="library-updated-cell">
@@ -166,7 +159,7 @@ export function LibraryPage({
                         onClick={() => onToggleFile(file)}
                         aria-label={file.is_enabled ? `Disable ${file.file_name}` : `Enable ${file.file_name}`}
                       >
-                        {file.is_enabled ? "Off" : "On"}
+                        <Icon name={file.is_enabled ? "ban" : "check"} />
                       </button>
                       <button
                         className="library-delete-button"
@@ -175,7 +168,7 @@ export function LibraryPage({
                         onClick={() => setDeleteTarget(file)}
                         aria-label={`Delete ${file.file_name}`}
                       >
-                        Del
+                        <Icon name="trash" />
                       </button>
                     </div>
                   </div>
@@ -184,7 +177,12 @@ export function LibraryPage({
             </>
           ) : null}
         </div>
-      </div>
+        <div className="library-table-footer">
+          <button className="restart-button library-upload-button" type="button" onClick={() => setUploadOpen(true)}>
+            Upload
+          </button>
+        </div>
+      </section>
 
       {uploadOpen && library ? (
         <UploadDialog
@@ -201,6 +199,7 @@ export function LibraryPage({
         <Dialog
           title="Delete File"
           onClose={() => setDeleteTarget(null)}
+          className="dialog-compact"
           actions={
             <>
               <button className="secondary-button library-delete-cancel" type="button" onClick={() => setDeleteTarget(null)}>

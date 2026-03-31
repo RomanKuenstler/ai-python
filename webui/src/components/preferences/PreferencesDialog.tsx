@@ -1,9 +1,10 @@
 import { useMemo, useState } from "react";
 import type { AssistantMode, Chat, SettingsUpdate } from "../../types/chat";
+import { Icon } from "../common/Icons";
 import { Dialog } from "../common/Dialog";
 
 type PreferencesDialogProps = {
-  initialTab?: "general" | "personalization" | "settings" | "archive";
+  initialTab?: "general" | "personalization" | "settings" | "filter" | "archive";
   archivedChats: Chat[];
   settingsDraft: SettingsUpdate | null;
   availableModes: AssistantMode[];
@@ -20,10 +21,11 @@ type PreferencesDialogProps = {
 };
 
 const TABS = [
-  { id: "general", label: "General" },
-  { id: "personalization", label: "Personalization" },
-  { id: "settings", label: "Settings" },
-  { id: "archive", label: "Archive" },
+  { id: "general", label: "General", icon: "settings" },
+  { id: "personalization", label: "Personalization", icon: "sparkles" },
+  { id: "settings", label: "Settings", icon: "settings" },
+  { id: "filter", label: "Filter", icon: "filter" },
+  { id: "archive", label: "Archive", icon: "archive" },
 ] as const;
 
 export function PreferencesDialog({
@@ -53,47 +55,49 @@ export function PreferencesDialog({
     return null;
   }, [settingsDraft]);
 
-  const actions =
-    activeTab === "settings" ? (
-      <>
-        <button className="secondary-button" type="button" onClick={onClose}>
-          Close
-        </button>
-        <button className="primary-button" type="button" onClick={onSaveSettings} disabled={saving || loading || !!settingsValidation || !settingsDraft}>
-          {saving ? "Saving..." : "Save"}
-        </button>
-      </>
-    ) : (
-      <button className="secondary-button" type="button" onClick={onClose}>
-        Close
-      </button>
-    );
-
   return (
-    <Dialog title="Preferences" onClose={onClose} actions={actions}>
-      <div className="preferences-dialog">
-        <div className="preferences-tabs" role="tablist" aria-label="Preferences tabs">
+    <Dialog
+      title="Preferences"
+      onClose={onClose}
+      actions={null}
+      hideHeader
+      className="dialog-wide panel-modal-with-tabs"
+      contentClassName="preferences-dialog-content"
+      bodyClassName="preferences-dialog panel-modal-tab-layout"
+    >
+      <div className="preferences-tabs panel-tab-nav" role="tablist" aria-label="Preferences tabs">
+          <div className="panel-tab-nav-top">
+            <button className="ghost-button panel-close panel-close-sidebar" type="button" onClick={onClose} aria-label="Close preferences dialog">
+              x
+            </button>
+          </div>
           {TABS.map((tab) => (
             <button
               key={tab.id}
               type="button"
               role="tab"
-              className={`preferences-tab${tab.id === activeTab ? " active" : ""}`}
+              className={`preferences-tab panel-tab-button${tab.id === activeTab ? " active" : ""}`}
               aria-selected={tab.id === activeTab}
               onClick={() => setActiveTab(tab.id)}
             >
-              {tab.label}
+              <span className="panel-tab-button-icon" aria-hidden="true">
+                <Icon name={tab.icon} />
+              </span>
+              <span>{tab.label}</span>
             </button>
           ))}
-        </div>
+      </div>
 
-        <div className="preferences-panel">
+      <div className="preferences-panel">
           {activeTab === "general" ? (
-            <div className="preferences-section">
-              <p className="preferences-copy">Available assistant modes for this Step 6 system.</p>
-              <div className="preferences-mode-list">
+            <div className="preferences-section info-groups">
+              <section className="info-group-card">
+                <h4>Assistant Modes</h4>
+                <p className="preferences-copy">Available assistant modes for this system.</p>
+              </section>
+              <div className="preferences-mode-list assistant-mode-grid">
                 {availableModes.map((mode) => (
-                  <div key={mode} className="preferences-mode-card">
+                  <div key={mode} className="preferences-mode-card assistant-mode-card">
                     <strong>{mode}</strong>
                     <span>{mode === "simple" ? "Single-step retrieval and answer generation." : "Two-stage draft and refinement pipeline."}</span>
                   </div>
@@ -103,82 +107,150 @@ export function PreferencesDialog({
           ) : null}
 
           {activeTab === "personalization" ? (
-            <div className="preferences-section">
+            <div className="preferences-section info-groups">
+              <section className="info-group-card personalization-section-card">
+                <h4>Personalization</h4>
               <p className="preferences-copy">Personalization is reserved for a future step.</p>
               <div className="preferences-placeholder">Placeholder UI for user-specific instructions and tone settings.</div>
+              </section>
             </div>
           ) : null}
 
           {activeTab === "settings" ? (
-            <div className="preferences-section">
-              <div className="settings-grid" role="table" aria-label="Live retrieval settings">
-                <div className="settings-grid-head" role="row">
+            <div className="preferences-section config-sections">
+              <section className="settings-grid info-group-card general-settings-card config-live-table-card">
+                <div className="settings-grid-head config-live-table-head" role="row">
                   <span>Setting</span>
                   <span>Value</span>
-                  <span>Constraints</span>
                 </div>
-                <div className="settings-grid-row" role="row">
-                  <label htmlFor="history-limit">Chat history messages count</label>
-                  <input
-                    id="history-limit"
-                    className="dialog-input"
-                    type="number"
-                    min={1}
-                    max={50}
-                    value={settingsDraft?.chat_history_messages_count ?? ""}
-                    onChange={(event) => onFieldChange({ chat_history_messages_count: Number(event.target.value) })}
-                    disabled={loading || saving}
-                  />
-                  <span>1 to 50</span>
+                <div className="settings-grid-row config-live-table-row" role="row">
+                  <div className="config-setting-cell">
+                    <strong>History Messages</strong>
+                    <small>Retrieval</small>
+                  </div>
+                  <div className="config-edit-form">
+                    <input
+                      id="history-limit"
+                      className="dialog-input config-input"
+                      type="number"
+                      min={1}
+                      max={50}
+                      value={settingsDraft?.chat_history_messages_count ?? ""}
+                      onChange={(event) => onFieldChange({ chat_history_messages_count: Number(event.target.value) })}
+                      disabled={loading || saving}
+                    />
+                    <button
+                      className="primary-button config-apply-save-button"
+                      type="button"
+                      onClick={onSaveSettings}
+                      disabled={saving || loading || !!settingsValidation || !settingsDraft}
+                      aria-label="Save History Messages"
+                      title="Save History Messages"
+                    >
+                      {saving ? "..." : "Save"}
+                    </button>
+                  </div>
                 </div>
-                <div className="settings-grid-row" role="row">
-                  <label htmlFor="max-similarities">Max similarities</label>
-                  <input
-                    id="max-similarities"
-                    className="dialog-input"
-                    type="number"
-                    min={1}
-                    max={50}
-                    value={settingsDraft?.max_similarities ?? ""}
-                    onChange={(event) => onFieldChange({ max_similarities: Number(event.target.value) })}
-                    disabled={loading || saving}
-                  />
-                  <span>1 to 50</span>
+                <div className="settings-grid-row config-live-table-row" role="row">
+                  <div className="config-setting-cell">
+                    <strong>Max Similarities</strong>
+                    <small>Retrieval</small>
+                  </div>
+                  <div className="config-edit-form">
+                    <input
+                      id="max-similarities"
+                      className="dialog-input config-input"
+                      type="number"
+                      min={1}
+                      max={50}
+                      value={settingsDraft?.max_similarities ?? ""}
+                      onChange={(event) => onFieldChange({ max_similarities: Number(event.target.value) })}
+                      disabled={loading || saving}
+                    />
+                    <button
+                      className="primary-button config-apply-save-button"
+                      type="button"
+                      onClick={onSaveSettings}
+                      disabled={saving || loading || !!settingsValidation || !settingsDraft}
+                      aria-label="Save Max Similarities"
+                      title="Save Max Similarities"
+                    >
+                      {saving ? "..." : "Save"}
+                    </button>
+                  </div>
                 </div>
-                <div className="settings-grid-row" role="row">
-                  <label htmlFor="min-similarities">Min similarities</label>
-                  <input
-                    id="min-similarities"
-                    className="dialog-input"
-                    type="number"
-                    min={1}
-                    max={50}
-                    value={settingsDraft?.min_similarities ?? ""}
-                    onChange={(event) => onFieldChange({ min_similarities: Number(event.target.value) })}
-                    disabled={loading || saving}
-                  />
-                  <span>1 to 50, must be {"<="} max</span>
+                <div className="settings-grid-row config-live-table-row" role="row">
+                  <div className="config-setting-cell">
+                    <strong>Min Similarities</strong>
+                    <small>Retrieval</small>
+                  </div>
+                  <div className="config-edit-form">
+                    <input
+                      id="min-similarities"
+                      className="dialog-input config-input"
+                      type="number"
+                      min={1}
+                      max={50}
+                      value={settingsDraft?.min_similarities ?? ""}
+                      onChange={(event) => onFieldChange({ min_similarities: Number(event.target.value) })}
+                      disabled={loading || saving}
+                    />
+                    <button
+                      className="primary-button config-apply-save-button"
+                      type="button"
+                      onClick={onSaveSettings}
+                      disabled={saving || loading || !!settingsValidation || !settingsDraft}
+                      aria-label="Save Min Similarities"
+                      title="Save Min Similarities"
+                    >
+                      {saving ? "..." : "Save"}
+                    </button>
+                  </div>
                 </div>
-                <div className="settings-grid-row" role="row">
-                  <label htmlFor="score-threshold">Similarity score threshold</label>
-                  <input
-                    id="score-threshold"
-                    className="dialog-input"
-                    type="number"
-                    min={0}
-                    max={1}
-                    step={0.01}
-                    value={settingsDraft?.similarity_score_threshold ?? ""}
-                    onChange={(event) => onFieldChange({ similarity_score_threshold: Number(event.target.value) })}
-                    disabled={loading || saving}
-                  />
-                  <span>0.00 to 1.00</span>
+                <div className="settings-grid-row config-live-table-row" role="row">
+                  <div className="config-setting-cell">
+                    <strong>Cosine Limit</strong>
+                    <small>Retrieval</small>
+                  </div>
+                  <div className="config-edit-form">
+                    <input
+                      id="score-threshold"
+                      className="dialog-input config-input"
+                      type="number"
+                      min={0}
+                      max={1}
+                      step={0.01}
+                      value={settingsDraft?.similarity_score_threshold ?? ""}
+                      onChange={(event) => onFieldChange({ similarity_score_threshold: Number(event.target.value) })}
+                      disabled={loading || saving}
+                    />
+                    <button
+                      className="primary-button config-apply-save-button"
+                      type="button"
+                      onClick={onSaveSettings}
+                      disabled={saving || loading || !!settingsValidation || !settingsDraft}
+                      aria-label="Save Cosine Limit"
+                      title="Save Cosine Limit"
+                    >
+                      {saving ? "..." : "Save"}
+                    </button>
+                  </div>
                 </div>
-              </div>
+              </section>
 
-              {settingsValidation ? <p className="inline-error">{settingsValidation}</p> : null}
-              {error ? <p className="inline-error">{error}</p> : null}
-              {success ? <p className="inline-success">{success}</p> : null}
+              {settingsValidation ? <p className="inline-error config-settings-error">{settingsValidation}</p> : null}
+              {error ? <p className="inline-error config-settings-error">{error}</p> : null}
+              {success ? <p className="inline-success preferences-inline-success">{success}</p> : null}
+            </div>
+          ) : null}
+
+          {activeTab === "filter" ? (
+            <div className="preferences-section info-groups">
+              <section className="info-group-card">
+                <h4>Filter</h4>
+                <p className="preferences-copy">Filter controls are reserved for a future step.</p>
+                <div className="preferences-placeholder">Placeholder UI for global tag filtering and retrieval scope controls.</div>
+              </section>
             </div>
           ) : null}
 
@@ -187,14 +259,14 @@ export function PreferencesDialog({
               {archivedChats.length === 0 ? (
                 <div className="preferences-placeholder">No archived chats yet.</div>
               ) : (
-                <div className="archive-list">
+                <div className="archive-list archive-table-wrapper">
                   {archivedChats.map((chat) => (
-                    <div key={chat.id} className="archive-row">
+                    <div key={chat.id} className="archive-row archive-table-row">
                       <div className="archive-meta">
-                        <strong>{chat.chat_name}</strong>
-                        <span>Updated {new Date(chat.updated_at).toLocaleString()}</span>
+                        <strong className="archive-chat-name">{chat.chat_name}</strong>
+                        <span className="archive-chat-date">Updated {new Date(chat.updated_at).toLocaleString()}</span>
                       </div>
-                      <div className="archive-actions">
+                      <div className="archive-actions archive-row-actions">
                         <button className="secondary-button" type="button" onClick={() => onDownloadChat(chat.id)}>
                           Download
                         </button>
@@ -211,7 +283,6 @@ export function PreferencesDialog({
               )}
             </div>
           ) : null}
-        </div>
       </div>
     </Dialog>
   );

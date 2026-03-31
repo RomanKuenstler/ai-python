@@ -30,21 +30,17 @@ export function SourcesPanel({ open, onClose, sources }: SourcesPanelProps) {
   }
 
   return (
-    <div className="sources-panel" ref={ref}>
-      <div className="sources-panel-header">
-        <strong>{sources.length} sources</strong>
-      </div>
-      <div className="sources-list">
+    <section className="sources-panel assistant-evidence-menu down" ref={ref} role="menu" aria-label="Sources">
+      <h4 className="sources-panel-header assistant-evidence-heading">Sources</h4>
+      <p className="assistant-evidence-summary">{sources.length} retrieved matches</p>
+      <div className="sources-list assistant-evidence-list">
         {sources.map((source) => (
           <article className="source-card" key={`${source.chunk_id}-${source.file_name}`}>
-            <div className="source-row">
-              <strong>{source.file_name}</strong>
-              <span>{source.score.toFixed(3)}</span>
+            <div className="source-row assistant-evidence-meta">
+              <strong className="assistant-evidence-file-name">{source.file_name}</strong>
+              <span className="assistant-evidence-score">{source.score.toFixed(3)}</span>
             </div>
-            <p>{[source.title, source.chapter, source.section].filter(Boolean).join(" • ") || "Untitled chunk"}</p>
-            <p className="source-path">{source.file_path}</p>
             <div className="source-meta">
-              {source.page_number !== null ? <span>Page {source.page_number}</span> : null}
               {source.tags.map((tag) => (
                 <span className="tag-pill" key={tag}>
                   {tag}
@@ -54,6 +50,6 @@ export function SourcesPanel({ open, onClose, sources }: SourcesPanelProps) {
           </article>
         ))}
       </div>
-    </div>
+    </section>
   );
 }

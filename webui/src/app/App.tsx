@@ -9,7 +9,7 @@ import { Sidebar } from "../components/sidebar/Sidebar";
 import { useChatApp } from "../hooks/useChatApp";
 import type { AssistantMode } from "../types/chat";
 
-type PreferencesTab = "general" | "personalization" | "settings" | "archive";
+type PreferencesTab = "general" | "personalization" | "settings" | "filter" | "archive";
 
 function AppRoutes() {
   const app = useChatApp();
@@ -90,8 +90,9 @@ function AppRoutes() {
     <>
       <AppShell
         sidebar={sidebar}
-        onOpenArchive={() => void openPreferences("archive")}
-        onOpenPreferences={() => void openPreferences("settings")}
+        assistantMode={app.assistantMode}
+        availableModes={app.settings?.available_assistant_modes ?? ["simple", "refine"]}
+        onAssistantModeChange={app.setAssistantMode}
         content={
           <Routes>
             <Route
@@ -119,10 +120,8 @@ function AppRoutes() {
                   messages={app.activeMessages}
                   sending={app.sending}
                   assistantMode={app.assistantMode}
-                  availableModes={app.settings?.available_assistant_modes ?? ["simple", "refine"]}
                   attachmentRules={app.attachmentRules}
                   onOpenChat={(chatId) => void app.ensureChatLoaded(chatId)}
-                  onAssistantModeChange={app.setAssistantMode}
                   onSend={app.sendMessage}
                 />
               }
@@ -155,13 +154,49 @@ function AppRoutes() {
         <Dialog
           title="Info"
           onClose={() => setInfoOpen(false)}
-          actions={
-            <button className="secondary-button" type="button" onClick={() => setInfoOpen(false)}>
-              Close
-            </button>
-          }
+          className="dialog-wide info-dialog"
+          actions={null}
         >
-          <p>This local RAG system indexes your documents, retrieves relevant chunks, and answers with source-backed responses.</p>
+          <div className="info-panel">
+            <section className="info-panel-section">
+              <h4>Status</h4>
+              <div className="info-table">
+                {[
+                  ["Backend", "Web API orchestration and chat handling."],
+                  ["Retriever", "Retrieval, prompt assembly, and answer generation."],
+                  ["Embedder", "Processes library files and maintains embeddings."],
+                  ["OCR Scanner", "Extracts text from supported images when needed."],
+                  ["Vector Db", "Stores nearest-neighbor retrieval vectors."],
+                  ["Postgres", "Stores chats, messages, file metadata, and settings."],
+                ].map(([label, description]) => (
+                  <div className="info-row" key={label}>
+                    <div className="info-copy">
+                      <strong>{label}</strong>
+                      <span>{description}</span>
+                    </div>
+                    <span className="status-pill enabled">Active</span>
+                  </div>
+                ))}
+              </div>
+            </section>
+            <section className="info-panel-section">
+              <h4>Storage</h4>
+              <div className="info-table">
+                <div className="info-row">
+                  <div className="info-copy">
+                    <strong>Knowledge Base</strong>
+                  </div>
+                  <span>Qdrant</span>
+                </div>
+                <div className="info-row">
+                  <div className="info-copy">
+                    <strong>Persistent Storage</strong>
+                  </div>
+                  <span>Postgres</span>
+                </div>
+              </div>
+            </section>
+          </div>
         </Dialog>
       ) : null}
 
@@ -169,13 +204,30 @@ function AppRoutes() {
         <Dialog
           title="Help"
           onClose={() => setHelpOpen(false)}
-          actions={
-            <button className="secondary-button" type="button" onClick={() => setHelpOpen(false)}>
-              Close
-            </button>
-          }
+          className="dialog-wide help-dialog"
+          actions={null}
         >
-          <p>Use the library to manage files, choose an assistant mode in the composer, and open preferences to tune retrieval or manage archived chats.</p>
+          <div className="info-panel">
+            <section className="info-panel-section">
+              <h4>Chat Usage</h4>
+              <p>Create chats from the sidebar, use one chat per topic when helpful, and open the chat menu to rename, download, archive, or delete a chat.</p>
+              <p>Type in the bottom composer and press Enter to send or Shift+Enter for a new line.</p>
+            </section>
+            <section className="info-panel-section">
+              <h4>Attachable File Extensions</h4>
+              <div className="chip-row">
+                {[".md", ".txt", ".html", ".htm", ".pdf", ".epub", ".csv", ".png", ".jpg", ".jpeg", ".webp"].map((extension) => (
+                  <span key={extension} className="tag-pill">
+                    {extension}
+                  </span>
+                ))}
+              </div>
+            </section>
+            <section className="info-panel-section">
+              <h4>Preferences</h4>
+              <p>Use Preferences to review assistant modes, retrieval settings, personalization placeholders, and archived chats.</p>
+            </section>
+          </div>
         </Dialog>
       ) : null}
 
@@ -189,10 +241,8 @@ type ChatRouteProps = {
   sending: boolean;
   error: string | null;
   assistantMode: ReturnType<typeof useChatApp>["assistantMode"];
-  availableModes: AssistantMode[];
   attachmentRules: ReturnType<typeof useChatApp>["attachmentRules"];
   onOpenChat: (chatId: string) => void;
-  onAssistantModeChange: ReturnType<typeof useChatApp>["setAssistantMode"];
   onSend: ReturnType<typeof useChatApp>["sendMessage"];
 };
 
@@ -202,10 +252,8 @@ function ChatRoute({
   sending,
   error,
   assistantMode,
-  availableModes,
   attachmentRules,
   onOpenChat,
-  onAssistantModeChange,
   onSend,
 }: ChatRouteProps) {
   const { chatId } = useParams();
@@ -223,9 +271,7 @@ function ChatRoute({
       loadingMessages={loading}
       error={error}
       assistantMode={assistantMode}
-      availableModes={availableModes}
       attachmentRules={attachmentRules}
-      onAssistantModeChange={onAssistantModeChange}
       onSend={onSend}
     />
   );

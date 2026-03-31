@@ -1,24 +1,32 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Icon } from "../common/Icons";
 import type { AssistantMode } from "../../types/chat";
 
 type ChatInputProps = {
   disabled: boolean;
-  assistantMode: AssistantMode;
-  availableModes: AssistantMode[];
   attachmentRules: {
     maxFiles: number;
     allowedExtensions: string[];
   };
-  onAssistantModeChange: (mode: AssistantMode) => void;
   onSend: (value: string, attachments: File[], mode: AssistantMode) => Promise<void>;
+  assistantMode: AssistantMode;
 };
 
-export function ChatInput({ disabled, assistantMode, availableModes, attachmentRules, onAssistantModeChange, onSend }: ChatInputProps) {
+export function ChatInput({ disabled, assistantMode, attachmentRules, onSend }: ChatInputProps) {
   const [value, setValue] = useState("");
   const [attachments, setAttachments] = useState<File[]>([]);
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const acceptValue = useMemo(() => attachmentRules.allowedExtensions.join(","), [attachmentRules.allowedExtensions]);
+
+  useEffect(() => {
+    if (!textareaRef.current) {
+      return;
+    }
+    textareaRef.current.style.height = "0px";
+    textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 192)}px`;
+  }, [value]);
 
   function validateFiles(nextFiles: File[]) {
     if (nextFiles.length > attachmentRules.maxFiles) {
@@ -67,15 +75,37 @@ export function ChatInput({ disabled, assistantMode, availableModes, attachmentR
   }
 
   return (
-    <div className="composer-shell">
+    <form
+      className="composer"
+      onSubmit={(event) => {
+        event.preventDefault();
+        void handleSubmit();
+      }}
+    >
+      <div className="composer-input-shell">
+        <input
+          ref={inputRef}
+          type="file"
+          className="composer-file-input"
+          hidden
+          multiple
+          accept={acceptValue}
+          onChange={(event) => handleAttachmentSelection(event.target.files)}
+        />
       {attachments.length > 0 ? (
-        <div className="attachment-preview-list composer-attachment-list">
+        <div className="attachment-preview-list composer-attachment-list composer-attachment-chip-list">
           {attachments.map((file) => (
             <div key={`${file.name}-${file.size}`} className="attachment-chip composer-attachment-chip">
-              <span className="composer-attachment-name">{file.name}</span>
+              <div className={`composer-attachment-icon ${file.name.endsWith(".pdf") ? "is-red" : file.name.endsWith(".html") || file.name.endsWith(".htm") ? "is-blue" : file.name.endsWith(".epub") ? "is-purple" : file.name.endsWith(".md") || file.name.endsWith(".txt") ? "is-gray" : "is-green"}`}>
+                <span className="composer-attachment-icon-label">{file.name.split(".").pop()?.slice(0, 3).toUpperCase() ?? "FILE"}</span>
+              </div>
+              <div className="composer-attachment-meta">
+                <span className="composer-attachment-name">{file.name}</span>
+                <span className="composer-attachment-ext">{file.name.split(".").pop()?.toUpperCase() ?? "FILE"}</span>
+              </div>
               <button
                 type="button"
-                className="attachment-remove-button"
+                className="attachment-remove-button composer-attachment-remove"
                 onClick={() => setAttachments((current) => current.filter((item) => !(item.name === file.name && item.size === file.size)))}
                 disabled={disabled}
                 aria-label={`Remove ${file.name}`}
@@ -86,52 +116,31 @@ export function ChatInput({ disabled, assistantMode, availableModes, attachmentR
           ))}
         </div>
       ) : null}
-      <textarea
-        className="composer-input"
-        rows={1}
-        placeholder="Ask anything about your indexed documents..."
-        value={value}
-        disabled={disabled}
-        onChange={(event) => setValue(event.target.value)}
-        onKeyDown={(event) => {
-          if (event.key === "Enter" && !event.shiftKey) {
-            event.preventDefault();
-            void handleSubmit();
-          }
-        }}
-      />
-      <div className="composer-actions">
-        <input
-          ref={inputRef}
-          type="file"
-          hidden
-          multiple
-          accept={acceptValue}
-          onChange={(event) => handleAttachmentSelection(event.target.files)}
-        />
-        <button className="attachment-button" type="button" onClick={() => inputRef.current?.click()} disabled={disabled}>
-          Attach
-        </button>
-        <label className="composer-mode-picker">
-          <span className="composer-mode-label">Assistant mode</span>
-          <select
-            className="composer-mode-select"
-            value={assistantMode}
-            onChange={(event) => onAssistantModeChange(event.target.value as AssistantMode)}
+        <div className="composer-entry-row">
+          <button className="attachment-button composer-attach-button" type="button" onClick={() => inputRef.current?.click()} disabled={disabled} aria-label="Attach files">
+            +
+          </button>
+          <textarea
+            ref={textareaRef}
+            className="composer-input"
+            rows={1}
+            placeholder="Ask anything about your knowledge base..."
+            value={value}
             disabled={disabled}
-          >
-            {availableModes.map((mode) => (
-              <option key={mode} value={mode}>
-                {mode}
-              </option>
-            ))}
-          </select>
-        </label>
-        <button className="send-button" type="button" disabled={disabled || !value.trim()} onClick={() => void handleSubmit()}>
-          Send
-        </button>
+            onChange={(event) => setValue(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" && !event.shiftKey) {
+                event.preventDefault();
+                void handleSubmit();
+              }
+            }}
+          />
+        </div>
       </div>
-      {error ? <p className="inline-error">{error}</p> : null}
-    </div>
+      <button className="send-button send" type="submit" disabled={disabled || !value.trim()} aria-label="Send prompt">
+        <Icon name="arrow-up" className="send-icon" />
+      </button>
+      {error ? <p className="inline-error composer-attachment-notice invalid">{error}</p> : null}
+    </form>
   );
 }

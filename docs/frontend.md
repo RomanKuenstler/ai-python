@@ -9,37 +9,35 @@
 - `react-markdown` with `remark-gfm`
 - `rehype-sanitize`
 
-## Step 5 UI Changes
+## Step 7 Layout Structure
 
-The UI now follows the Step 5 reference direction with:
+- `AppShell` owns the fixed top bar, persistent left sidebar, and main workspace.
+- `Sidebar` keeps all existing chat, archive, preferences, help, and info actions while matching the reference spacing and menu treatment more closely.
+- `ChatView` now uses a low-chrome conversation layout with full-width assistant messages, right-aligned user bubbles, a fixed bottom composer, and inline error banners.
+- `LibraryPage` is split into a compact summary card and a table card, following the reference section rhythm.
+- `PreferencesDialog` now uses a two-column tabbed modal structure instead of a simple top-tab strip so it matches the reference modal layout.
 
-- fixed top bar and fixed left navigation
-- white, low-chrome workspace styling
-- chat action menus for rename and delete
-- disabled placeholders for archive and personalization/settings-adjacent controls
-- attachment-capable composer with previews, removal, and validation
+## Major Component Structure
 
-## Chat Experience
+- `Dialog` is the shared modal primitive. Step 7 added optional sizing and body/content class hooks so compact confirmations and wide tabbed panels can share the same implementation.
+- `ChatInput` keeps existing send and attachment behavior, but its markup now follows the reference composer pattern: fixed dock, attachment chips, attach trigger, mode selector, and icon-style send button.
+- `MessageBubble` keeps markdown, attachments, and sources working while using role-specific layout wrappers that mirror the reference message treatment.
+- `SourcesPanel` now renders as a compact evidence popover with summary text, stacked source rows, and restrained metadata styling.
+- `PreferencesDialog` and `LibraryPage` both rely on the shared section and table styling language introduced in Step 7.
 
-- optimistic user and assistant message placeholders
-- markdown rendering for assistant responses
-- per-message attachment chips for user messages
-- collapsible source panels for assistant replies
-- input disabled while a message is in flight
+## Styling Approach
 
-## Library Experience
+- Styling remains centralized in `webui/src/styles/index.css`.
+- Step 7 introduced shared design tokens in `:root` for palette, borders, radius, shadows, and transitions.
+- The stylesheet is organized around shell, sidebar, chat, composer, dialogs, tables, and preferences patterns instead of one-off local overrides.
+- Reference parity is achieved by rebuilding styles against the existing React structure instead of copying the reference implementation directly.
 
-- summary metrics row
-- file management table
-- upload dialog with extension-aware validation
-- enable/disable and delete actions
+## Restyling Refactors
 
-## Attachment UX
-
-- max 3 files per message
-- supported extensions mirror backend config defaults
-- invalid files surface inline errors
-- attached files remain visible above the composer until send or removal
+- Normalized message and composer markup so the reference spacing rules can be applied consistently.
+- Expanded the shared `Dialog` component to support both wide and compact modal variants.
+- Moved the preferences UI into a sidebar-tab modal layout.
+- Unified button, popover, chip, and table styling across chat, library, and preferences so the UI reads as one design system.
 
 ## Local Run
 

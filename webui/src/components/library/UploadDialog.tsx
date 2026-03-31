@@ -71,6 +71,7 @@ export function UploadDialog({ allowedExtensions, defaultTag, maxFiles, uploadin
     <Dialog
       title="Upload Files"
       onClose={uploading ? () => undefined : onClose}
+      className="dialog-compact upload-dialog-compact"
       actions={
         <>
           <button className="secondary-button" type="button" onClick={onClose} disabled={uploading}>
