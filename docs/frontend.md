@@ -1,0 +1,50 @@
+# Frontend
+
+## Stack
+
+- React 18
+- TypeScript
+- Vite
+- `react-router-dom`
+- `react-markdown` with `remark-gfm`
+- `rehype-sanitize`
+
+## Step 7 Layout Structure
+
+- `AppShell` owns the fixed top bar, persistent left sidebar, and main workspace.
+- `Sidebar` keeps all existing chat, archive, preferences, help, and info actions while matching the reference spacing and menu treatment more closely.
+- `ChatView` now uses a low-chrome conversation layout with full-width assistant messages, right-aligned user bubbles, a fixed bottom composer, and inline error banners.
+- `LibraryPage` is split into a compact summary card and a table card, following the reference section rhythm.
+- `PreferencesDialog` now uses a two-column tabbed modal structure instead of a simple top-tab strip so it matches the reference modal layout.
+
+## Major Component Structure
+
+- `Dialog` is the shared modal primitive. Step 7 added optional sizing and body/content class hooks so compact confirmations and wide tabbed panels can share the same implementation.
+- `ChatInput` keeps existing send and attachment behavior, but its markup now follows the reference composer pattern: fixed dock, attachment chips, attach trigger, mode selector, and icon-style send button.
+- `MessageBubble` keeps markdown, attachments, and sources working while using role-specific layout wrappers that mirror the reference message treatment.
+- `SourcesPanel` now renders as a compact evidence popover with summary text, stacked source rows, and restrained metadata styling.
+- `PreferencesDialog` and `LibraryPage` both rely on the shared section and table styling language introduced in Step 7.
+
+## Styling Approach
+
+- Styling remains centralized in `webui/src/styles/index.css`.
+- Step 7 introduced shared design tokens in `:root` for palette, borders, radius, shadows, and transitions.
+- The stylesheet is organized around shell, sidebar, chat, composer, dialogs, tables, and preferences patterns instead of one-off local overrides.
+- Reference parity is achieved by rebuilding styles against the existing React structure instead of copying the reference implementation directly.
+
+## Restyling Refactors
+
+- Normalized message and composer markup so the reference spacing rules can be applied consistently.
+- Expanded the shared `Dialog` component to support both wide and compact modal variants.
+- Moved the preferences UI into a sidebar-tab modal layout.
+- Unified button, popover, chip, and table styling across chat, library, and preferences so the UI reads as one design system.
+
+## Local Run
+
+```bash
+cd webui
+npm install
+npm run dev
+```
+
+`VITE_API_BASE_URL` defaults to `http://localhost:8000`.

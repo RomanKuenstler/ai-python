@@ -1,0 +1,223 @@
+import type {
+  AdminUser,
+  AssistantMode,
+  AuthSession,
+  Chat,
+  ChatDownload,
+  ChatUpdate,
+  CurrentUser,
+  LibraryFile,
+  LibraryResponse,
+  LibraryUploadResponse,
+  Message,
+  MessageResponse,
+  Settings,
+  SettingsUpdate,
+} from "../types/chat";
+
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/$/, "") ?? "http://localhost:8000";
+const AUTH_STORAGE_KEY = "local-rag-auth-session";
+
+type AuthListener = (session: AuthSession | null) => void;
+
+const authListeners = new Set<AuthListener>();
+
+function readStoredAuthSession(): AuthSession | null {
+  const raw = window.localStorage.getItem(AUTH_STORAGE_KEY);
+  if (!raw) {
+    return null;
+  }
+  try {
+    return JSON.parse(raw) as AuthSession;
+  } catch {
+    window.localStorage.removeItem(AUTH_STORAGE_KEY);
+    return null;
+  }
+}
+
+function emitAuthSession(session: AuthSession | null) {
+  authListeners.forEach((listener) => listener(session));
+}
+
+export function getStoredAuthSession() {
+  return readStoredAuthSession();
+}
+
+export function setStoredAuthSession(session: AuthSession) {
+  window.localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(session));
+  emitAuthSession(session);
+}
+
+export function clearStoredAuthSession() {
+  window.localStorage.removeItem(AUTH_STORAGE_KEY);
+  emitAuthSession(null);
+}
+
+export function subscribeAuthSession(listener: AuthListener) {
+  authListeners.add(listener);
+  return () => {
+    authListeners.delete(listener);
+  };
+}
+
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const headers = new Headers(init?.headers ?? {});
+  const isFormData = init?.body instanceof FormData;
+  if (!isFormData && !headers.has("Content-Type")) {
+    headers.set("Content-Type", "application/json");
+  }
+
+  const authSession = readStoredAuthSession();
+  if (authSession?.token) {
+    headers.set("Authorization", `Bearer ${authSession.token}`);
+  }
+
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    ...init,
+    headers,
+  });
+
+  const refreshedToken = response.headers.get("X-Auth-Token");
+  if (refreshedToken && authSession) {
+    setStoredAuthSession({
+      ...authSession,
+      token: refreshedToken,
+      expires_at: response.headers.get("X-Auth-Expires-At") ?? authSession.expires_at,
+      max_expires_at: response.headers.get("X-Auth-Max-Expires-At") ?? authSession.max_expires_at,
+    });
+  }
+
+  if (!response.ok) {
+    if (response.status === 401) {
+      clearStoredAuthSession();
+    }
+    const body = (await response.json().catch(() => null)) as { detail?: string } | null;
+    throw new Error(body?.detail ?? `Request failed with status ${response.status}`);
+  }
+
+  if (response.status === 204) {
+    return undefined as T;
+  }
+
+  return (await response.json()) as T;
+}
+
+export const apiClient = {
+  login(username: string, password: string) {
+    return request<AuthSession>("/api/auth/login", {
+      method: "POST",
+      body: JSON.stringify({ username, password }),
+    });
+  },
+  logout() {
+    return request<void>("/api/auth/logout", { method: "POST" });
+  },
+  getMe() {
+    return request<{ user: CurrentUser; expires_at: string; max_expires_at: string }>("/api/auth/me");
+  },
+  changePassword(currentPassword: string | null, newPassword: string, confirmPassword: string) {
+    return request<AuthSession>("/api/auth/change-password", {
+      method: "POST",
+      body: JSON.stringify({
+        current_password: currentPassword,
+        new_password: newPassword,
+        confirm_password: confirmPassword,
+      }),
+    });
+  },
+  listAdminUsers() {
+    return request<AdminUser[]>("/api/admin/users");
+  },
+  createAdminUser(payload: { username: string; displayname: string; role: "user" | "admin" }) {
+    return request<AdminUser>("/api/admin/users", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+  updateAdminUser(userId: number, payload: Partial<Pick<AdminUser, "displayname" | "role" | "status" | "force_password_change">>) {
+    return request<AdminUser>(`/api/admin/users/${userId}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    });
+  },
+  deleteAdminUser(userId: number) {
+    return request<AdminUser>(`/api/admin/users/${userId}`, { method: "DELETE" });
+  },
+  createChat() {
+    return request<Chat>("/api/chats", { method: "POST" });
+  },
+  listChats() {
+    return request<Chat[]>("/api/chats");
+  },
+  listArchivedChats() {
+    return request<Chat[]>("/api/chats/archived");
+  },
+  renameChat(chatId: string, payload: ChatUpdate) {
+    return request<Chat>(`/api/chats/${chatId}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    });
+  },
+  archiveChat(chatId: string) {
+    return request<Chat>(`/api/chats/${chatId}/archive`, { method: "PATCH" });
+  },
+  unarchiveChat(chatId: string) {
+    return request<Chat>(`/api/chats/${chatId}/unarchive`, { method: "PATCH" });
+  },
+  deleteChat(chatId: string) {
+    return request<Chat>(`/api/chats/${chatId}`, { method: "DELETE" });
+  },
+  downloadChat(chatId: string) {
+    return request<ChatDownload>(`/api/chats/${chatId}/download`);
+  },
+  getMessages(chatId: string) {
+    return request<Message[]>(`/api/chats/${chatId}/messages`);
+  },
+  sendMessage(chatId: string, message: string, attachments: File[], assistantMode: AssistantMode) {
+    if (attachments.length === 0) {
+      return request<MessageResponse>(`/api/chats/${chatId}/messages`, {
+        method: "POST",
+        body: JSON.stringify({ message, assistant_mode: assistantMode }),
+      });
+    }
+
+    const formData = new FormData();
+    formData.append("message", message);
+    formData.append("assistant_mode", assistantMode);
+    attachments.forEach((file) => formData.append("files", file));
+    return request<MessageResponse>(`/api/chats/${chatId}/messages`, {
+      method: "POST",
+      body: formData,
+    });
+  },
+  getSettings() {
+    return request<Settings>("/api/settings");
+  },
+  updateSettings(payload: SettingsUpdate) {
+    return request<Settings>("/api/settings", {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    });
+  },
+  listLibraryFiles() {
+    return request<LibraryResponse>("/api/library/files");
+  },
+  updateLibraryFile(fileId: number, payload: { is_enabled: boolean }) {
+    return request<LibraryFile>(`/api/library/files/${fileId}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    });
+  },
+  deleteLibraryFile(fileId: number) {
+    return request<LibraryFile>(`/api/library/files/${fileId}`, { method: "DELETE" });
+  },
+  uploadLibraryFiles(files: File[], tagsByFile: Record<string, string[]>) {
+    const formData = new FormData();
+    files.forEach((file) => formData.append("files", file));
+    formData.append("tags_by_file", JSON.stringify(tagsByFile));
+    return request<LibraryUploadResponse>("/api/library/files/upload", {
+      method: "POST",
+      body: formData,
+    });
+  },
+};
