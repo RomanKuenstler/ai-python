@@ -34,6 +34,8 @@ from services.retriever.schemas.chat import (
     MessageCreateRequest,
     MessageCreateResponse,
     MessageRead,
+    PersonalizationRead,
+    PersonalizationUpdateRequest,
     SettingsRead,
     SettingsUpdateRequest,
 )
@@ -43,7 +45,7 @@ from services.retriever.services.retriever_service import RetrieverAppService
 
 def create_app() -> FastAPI:
     settings = get_settings()
-    app = FastAPI(title="Local RAG Retriever API", version="8.0.0")
+    app = FastAPI(title="Local RAG Retriever API", version="10.0.0")
 
     origins = [origin.strip() for origin in settings.cors_allowed_origins.split(",") if origin.strip()]
     app.add_middleware(
@@ -458,5 +460,20 @@ def create_app() -> FastAPI:
             return service.update_settings(auth.user, payload)
         except ValueError as error:
             raise HTTPException(status_code=422, detail=str(error)) from error
+
+    @app.get("/api/personalization", response_model=PersonalizationRead)
+    def get_personalization(
+        auth: AuthContext = Depends(get_app_auth_context),
+        service: RetrieverAppService = Depends(get_retriever_service),
+    ) -> PersonalizationRead:
+        return service.get_personalization(auth.user)
+
+    @app.patch("/api/personalization", response_model=PersonalizationRead)
+    def update_personalization(
+        payload: PersonalizationUpdateRequest,
+        auth: AuthContext = Depends(get_app_auth_context),
+        service: RetrieverAppService = Depends(get_retriever_service),
+    ) -> PersonalizationRead:
+        return service.update_personalization(auth.user, payload)
 
     return app

@@ -11,11 +11,23 @@ import type {
   LibraryFile,
   LibraryResponse,
   Message,
+  Personalization,
+  PersonalizationUpdate,
   Settings,
   SettingsUpdate,
 } from "../types/chat";
 
 const ACTIVE_CHAT_STORAGE_KEY = "local-rag-active-chat";
+const DEFAULT_PERSONALIZATION: Personalization = {
+  base_style: "default",
+  warm: "default",
+  enthusiastic: "default",
+  headers_and_lists: "default",
+  custom_instructions: "",
+  nickname: "",
+  occupation: "",
+  more_about_user: "",
+};
 
 export const ATTACHMENT_MAX_FILES = 3;
 export const ATTACHMENT_ALLOWED_EXTENSIONS = [".txt", ".md", ".html", ".htm", ".pdf", ".epub", ".csv", ".png", ".jpg", ".jpeg", ".webp"];
@@ -89,6 +101,12 @@ export function useChatApp() {
   const [settingsSaving, setSettingsSaving] = useState(false);
   const [settingsError, setSettingsError] = useState<string | null>(null);
   const [settingsSuccess, setSettingsSuccess] = useState<string | null>(null);
+  const [personalization, setPersonalization] = useState<Personalization | null>(null);
+  const [personalizationDraft, setPersonalizationDraft] = useState<PersonalizationUpdate | null>(null);
+  const [personalizationLoading, setPersonalizationLoading] = useState(false);
+  const [personalizationSaving, setPersonalizationSaving] = useState(false);
+  const [personalizationError, setPersonalizationError] = useState<string | null>(null);
+  const [personalizationSuccess, setPersonalizationSuccess] = useState<string | null>(null);
   const [globalFileFilters, setGlobalFileFilters] = useState<FilterFile[]>([]);
   const [globalTagFilters, setGlobalTagFilters] = useState<FilterTag[]>([]);
   const [chatFileFiltersByChat, setChatFileFiltersByChat] = useState<Record<string, FilterFile[]>>({});
@@ -158,10 +176,11 @@ export function useChatApp() {
     setBootstrapping(true);
     setAppError(null);
     try {
-      const [chatList, archivedList, runtimeSettings] = await Promise.all([
+      const [chatList, archivedList, runtimeSettings, personalizationSettings] = await Promise.all([
         apiClient.listChats(),
         apiClient.listArchivedChats(),
         apiClient.getSettings(),
+        apiClient.getPersonalization(),
       ]);
       setChats(sortChats(chatList));
       setArchivedChats(sortChats(archivedList));
@@ -172,6 +191,8 @@ export function useChatApp() {
         min_similarities: runtimeSettings.min_similarities,
         similarity_score_threshold: runtimeSettings.similarity_score_threshold,
       });
+      setPersonalization(personalizationSettings);
+      setPersonalizationDraft(personalizationSettings);
       setAssistantMode(runtimeSettings.default_assistant_mode);
 
       if (chatList.length === 0) {
@@ -200,6 +221,10 @@ export function useChatApp() {
     setLibraryError(null);
     setSettings(null);
     setSettingsDraft(null);
+    setPersonalization(null);
+    setPersonalizationDraft(null);
+    setPersonalizationError(null);
+    setPersonalizationSuccess(null);
     setGlobalFileFilters([]);
     setGlobalTagFilters([]);
     setChatFileFiltersByChat({});
@@ -447,9 +472,28 @@ export function useChatApp() {
     }
   }
 
+  async function loadPersonalization() {
+    setPersonalizationLoading(true);
+    setPersonalizationError(null);
+    try {
+      const payload = await apiClient.getPersonalization();
+      setPersonalization(payload);
+      setPersonalizationDraft(payload);
+    } catch (error) {
+      setPersonalizationError(error instanceof Error ? error.message : "Failed to load personalization");
+    } finally {
+      setPersonalizationLoading(false);
+    }
+  }
+
   function updateSettingsDraft(patch: Partial<SettingsUpdate>) {
     setSettingsDraft((current) => (current ? { ...current, ...patch } : current));
     setSettingsSuccess(null);
+  }
+
+  function updatePersonalizationDraft(patch: Partial<PersonalizationUpdate>) {
+    setPersonalizationDraft((current) => ({ ...(current ?? DEFAULT_PERSONALIZATION), ...patch }));
+    setPersonalizationSuccess(null);
   }
 
   async function saveSettings() {
@@ -476,6 +520,28 @@ export function useChatApp() {
       return null;
     } finally {
       setSettingsSaving(false);
+    }
+  }
+
+  async function savePersonalization() {
+    if (!personalizationDraft) {
+      return null;
+    }
+
+    setPersonalizationSaving(true);
+    setPersonalizationError(null);
+    setPersonalizationSuccess(null);
+    try {
+      const updated = await apiClient.updatePersonalization(personalizationDraft);
+      setPersonalization(updated);
+      setPersonalizationDraft(updated);
+      setPersonalizationSuccess("Personalization saved and applied to all chats.");
+      return updated;
+    } catch (error) {
+      setPersonalizationError(error instanceof Error ? error.message : "Failed to save personalization");
+      return null;
+    } finally {
+      setPersonalizationSaving(false);
     }
   }
 
@@ -791,6 +857,12 @@ export function useChatApp() {
     settingsSaving,
     settingsError,
     settingsSuccess,
+    personalization,
+    personalizationDraft,
+    personalizationLoading,
+    personalizationSaving,
+    personalizationError,
+    personalizationSuccess,
     globalFileFilters,
     globalTagFilters,
     chatFileFiltersByChat,
@@ -808,8 +880,11 @@ export function useChatApp() {
     downloadChat,
     sendMessage,
     loadSettings,
+    loadPersonalization,
     updateSettingsDraft,
+    updatePersonalizationDraft,
     saveSettings,
+    savePersonalization,
     loadGlobalFilters,
     loadChatFilters,
     toggleGlobalFileFilter,

@@ -20,7 +20,14 @@ from services.retriever.qdrant_client import RetrieverQdrantClient
 from services.retriever.repositories.chat_repository import ChatRepository
 from services.retriever.retriever import RetrievalService
 from services.retriever.schemas.auth import AdminUserRead, AuthLoginResponse, AuthMeResponse, PasswordChangeResponse
-from services.retriever.schemas.chat import ChatDownloadMessageRead, ChatDownloadResponse, SettingsRead, SettingsUpdateRequest
+from services.retriever.schemas.chat import (
+    ChatDownloadMessageRead,
+    ChatDownloadResponse,
+    PersonalizationRead,
+    PersonalizationUpdateRequest,
+    SettingsRead,
+    SettingsUpdateRequest,
+)
 from services.retriever.services.chat_naming import generate_chat_name
 from services.retriever.services.library_manager import LibraryManager, UploadFilePayload
 from services.retriever.services.message_mapper import map_attachment, map_chat, map_filter_file, map_filter_tag, map_message, map_source
@@ -31,6 +38,19 @@ RUNTIME_SETTING_KEYS = {
     "min_similarities",
     "similarity_score_threshold",
 }
+
+PERSONALIZATION_DEFAULTS = {
+    "base_style": "default",
+    "warm": "default",
+    "enthusiastic": "default",
+    "headers_and_lists": "default",
+    "custom_instructions": "",
+    "nickname": "",
+    "occupation": "",
+    "more_about_user": "",
+}
+
+PERSONALIZATION_SETTING_KEYS = set(PERSONALIZATION_DEFAULTS)
 
 
 @dataclass(slots=True)
@@ -274,6 +294,28 @@ class RetrieverAppService:
             self.chat_repository.upsert_setting(user.id, key, json.dumps(value))
         return self.get_settings(user)
 
+    def get_personalization(self, user: UserAccount) -> PersonalizationRead:
+        stored_values = self._load_stored_setting_values(user)
+        return PersonalizationRead(
+            base_style=str(stored_values.get("base_style", PERSONALIZATION_DEFAULTS["base_style"])),
+            warm=str(stored_values.get("warm", PERSONALIZATION_DEFAULTS["warm"])),
+            enthusiastic=str(stored_values.get("enthusiastic", PERSONALIZATION_DEFAULTS["enthusiastic"])),
+            headers_and_lists=str(
+                stored_values.get("headers_and_lists", PERSONALIZATION_DEFAULTS["headers_and_lists"])
+            ),
+            custom_instructions=str(
+                stored_values.get("custom_instructions", PERSONALIZATION_DEFAULTS["custom_instructions"])
+            ),
+            nickname=str(stored_values.get("nickname", PERSONALIZATION_DEFAULTS["nickname"])),
+            occupation=str(stored_values.get("occupation", PERSONALIZATION_DEFAULTS["occupation"])),
+            more_about_user=str(stored_values.get("more_about_user", PERSONALIZATION_DEFAULTS["more_about_user"])),
+        )
+
+    def update_personalization(self, user: UserAccount, payload: PersonalizationUpdateRequest) -> PersonalizationRead:
+        for key, value in payload.model_dump().items():
+            self.chat_repository.upsert_setting(user.id, key, json.dumps(str(value).strip()))
+        return self.get_personalization(user)
+
     def send_message(
         self,
         user: UserAccount | str,
@@ -312,6 +354,7 @@ class RetrieverAppService:
 
         self._load_runtime_settings(user)
         resolved_mode = self._resolve_assistant_mode(assistant_mode)
+        personalization = self.get_personalization(user)
         processed_attachments = self._process_attachments(attachments or [])
         user_message = self.chat_repository.create_message(
             user.id,
@@ -334,6 +377,7 @@ class RetrieverAppService:
             user_content=user_content,
             history=history,
             retrieved_chunks=retrieved_chunks,
+            personalization=personalization.model_dump(),
             processed_attachments=processed_attachments,
         )
         assistant_message = self.chat_repository.create_message(user.id, chat_id, "assistant", response)
@@ -385,6 +429,7 @@ class RetrieverAppService:
             user_content=user_content,
             history=history,
             retrieved_chunks=retrieved_chunks,
+            personalization=dict(PERSONALIZATION_DEFAULTS),
             processed_attachments=processed_attachments,
         )
         assistant_message = self.chat_repository.create_message(chat_id, "assistant", response)
@@ -429,12 +474,14 @@ class RetrieverAppService:
         user_content: str,
         history: list[tuple[str, str]],
         retrieved_chunks: list[dict[str, str | float | list[str] | None]],
+        personalization: dict[str, str],
         processed_attachments: list[dict[str, object]],
     ) -> str:
         common_kwargs = {
             "user_message": user_content,
             "history": history,
             "retrieved_chunks": retrieved_chunks,
+            "personalization": personalization,
             "attachments": processed_attachments,
             "attachment_char_limit": self.settings.attachment_max_total_chars,
         }
@@ -454,14 +501,7 @@ class RetrieverAppService:
         return mode
 
     def _load_runtime_settings(self, user: UserAccount) -> None:
-        stored_values: dict[str, object] = {}
-        for record in self.chat_repository.list_settings(user.id):
-            if record.key not in RUNTIME_SETTING_KEYS:
-                continue
-            try:
-                stored_values[record.key] = json.loads(record.value)
-            except json.JSONDecodeError:
-                continue
+        stored_values = self._load_stored_setting_values(user)
 
         self.history_service.history_limit = max(
             1,
@@ -479,6 +519,18 @@ class RetrieverAppService:
             max(float(stored_values.get("similarity_score_threshold", self.settings.retrieval_score_threshold)), 0.0),
             1.0,
         )
+
+    def _load_stored_setting_values(self, user: UserAccount) -> dict[str, object]:
+        stored_values: dict[str, object] = {}
+        supported_keys = RUNTIME_SETTING_KEYS | PERSONALIZATION_SETTING_KEYS
+        for record in self.chat_repository.list_settings(user.id):
+            if record.key not in supported_keys:
+                continue
+            try:
+                stored_values[record.key] = json.loads(record.value)
+            except json.JSONDecodeError:
+                continue
+        return stored_values
 
 
 def build_retriever_app_service(

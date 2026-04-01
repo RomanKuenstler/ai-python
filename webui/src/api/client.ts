@@ -15,6 +15,8 @@ import type {
   LibraryUploadResponse,
   Message,
   MessageResponse,
+  Personalization,
+  PersonalizationUpdate,
   Settings,
   SettingsUpdate,
 } from "../types/chat";
@@ -199,6 +201,15 @@ export const apiClient = {
   },
   updateSettings(payload: SettingsUpdate) {
     return request<Settings>("/api/settings", {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    });
+  },
+  getPersonalization() {
+    return request<Personalization>("/api/personalization");
+  },
+  updatePersonalization(payload: PersonalizationUpdate) {
+    return request<Personalization>("/api/personalization", {
       method: "PATCH",
       body: JSON.stringify(payload),
     });

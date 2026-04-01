@@ -16,6 +16,7 @@ from services.retriever.schemas.chat import (
     LibraryListResponse,
     LibrarySummaryRead,
     MessageRead,
+    PersonalizationRead,
     SettingsRead,
     SourceRead,
 )
@@ -257,6 +258,23 @@ class StubRetrieverService:
             default_assistant_mode="simple",
             available_assistant_modes=["simple", "refine"],
         )
+
+    def get_personalization(self, *_args, **_kwargs) -> PersonalizationRead:
+        return PersonalizationRead(
+            base_style="friendly",
+            warm="more",
+            enthusiastic="default",
+            headers_and_lists="more",
+            custom_instructions="Keep things practical.",
+            nickname="Rik",
+            occupation="Platform engineer",
+            more_about_user="Prefers examples with Docker or Python.",
+        )
+
+    def update_personalization(self, *_args, payload=None, **_kwargs) -> PersonalizationRead:
+        if payload is None and _args:
+            payload = _args[-1]
+        return PersonalizationRead(**payload.model_dump())
 
     def update_settings(self, *_args, payload=None, **_kwargs) -> SettingsRead:
         if payload is None and _args:
@@ -539,6 +557,27 @@ def test_download_and_settings_endpoints() -> None:
     )
     assert patch_response.status_code == 200
     assert patch_response.json()["similarity_score_threshold"] == 0.75
+
+    personalization_response = client.get("/api/personalization")
+    assert personalization_response.status_code == 200
+    assert personalization_response.json()["nickname"] == "Rik"
+
+    personalization_patch = client.patch(
+        "/api/personalization",
+        json={
+            "base_style": "professional",
+            "warm": "less",
+            "enthusiastic": "less",
+            "headers_and_lists": "default",
+            "custom_instructions": "Keep it concise.",
+            "nickname": "Rik",
+            "occupation": "Engineer",
+            "more_about_user": "Values concise answers.",
+        },
+    )
+    assert personalization_patch.status_code == 200
+    assert personalization_patch.json()["base_style"] == "professional"
+    assert personalization_patch.json()["custom_instructions"] == "Keep it concise."
 
 
 def test_filter_endpoints() -> None:

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -79,6 +80,32 @@ class SettingsUpdateRequest(BaseModel):
     max_similarities: int = Field(ge=1, le=50)
     min_similarities: int = Field(ge=1, le=50)
     similarity_score_threshold: float = Field(ge=0.0, le=1.0)
+
+
+PersonalizationBaseStyle = Literal["default", "professional", "friendly", "direct", "quirky", "efficient", "sceptical"]
+PersonalizationLevel = Literal["more", "default", "less"]
+
+
+class PersonalizationRead(BaseModel):
+    base_style: PersonalizationBaseStyle = "default"
+    warm: PersonalizationLevel = "default"
+    enthusiastic: PersonalizationLevel = "default"
+    headers_and_lists: PersonalizationLevel = "default"
+    custom_instructions: str = ""
+    nickname: str = ""
+    occupation: str = ""
+    more_about_user: str = ""
+
+
+class PersonalizationUpdateRequest(BaseModel):
+    base_style: PersonalizationBaseStyle
+    warm: PersonalizationLevel
+    enthusiastic: PersonalizationLevel
+    headers_and_lists: PersonalizationLevel
+    custom_instructions: str = Field(default="", max_length=4000)
+    nickname: str = Field(default="", max_length=255)
+    occupation: str = Field(default="", max_length=255)
+    more_about_user: str = Field(default="", max_length=4000)
 
 
 class ChatDownloadMessageRead(BaseModel):

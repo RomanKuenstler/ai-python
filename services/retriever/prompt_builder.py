@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 
 class PromptBuilder:
@@ -11,6 +12,32 @@ class PromptBuilder:
         self.assistant_refine_draft = (prompts_dir / "assistant-refine-draft.md").read_text(encoding="utf-8").strip()
         self.assistant_refine_refining = (prompts_dir / "assistant-refine-refining.md").read_text(encoding="utf-8").strip()
         self.rag_template = (prompts_dir / "ragcontext.md").read_text(encoding="utf-8").strip()
+        self.personalization_template = (prompts_dir / "personalization-template.md").read_text(encoding="utf-8").strip()
+        self.personalization_custom_instructions_template = (
+            prompts_dir / "personalization-custom-user-instructions-template.md"
+        ).read_text(encoding="utf-8").strip()
+        self.personalization_more_about_user_template = (
+            prompts_dir / "personalization-more-about-user-template.md"
+        ).read_text(encoding="utf-8").strip()
+        self.personalization_nickname_template = (
+            prompts_dir / "personalization-nickname-template.md"
+        ).read_text(encoding="utf-8").strip()
+        self.personalization_occupation_template = (
+            prompts_dir / "personalization-occupation-template.md"
+        ).read_text(encoding="utf-8").strip()
+        self.personalization_base_style_prompts = {
+            style: (prompts_dir / f"personalization-base-style-{style}.md").read_text(encoding="utf-8").strip()
+            for style in ("default", "professional", "friendly", "direct", "quirky", "efficient", "sceptical")
+        }
+        self.personalization_characteristic_prompts = {
+            characteristic: {
+                level: (prompts_dir / f"personalization-characteristic-{characteristic}-{level}.md")
+                .read_text(encoding="utf-8")
+                .strip()
+                for level in ("more", "default", "less")
+            }
+            for characteristic in ("warm", "enthusiastic", "headers-and-lists")
+        }
 
     def build_simple_messages(
         self,
@@ -18,6 +45,7 @@ class PromptBuilder:
         user_message: str,
         history: list[tuple[str, str]],
         retrieved_chunks: list[dict[str, str | float | list[str]]],
+        personalization: dict[str, Any] | None = None,
         attachments: list[dict[str, object]] | None = None,
         attachment_char_limit: int = 15000,
     ) -> list[tuple[str, str]]:
@@ -26,6 +54,7 @@ class PromptBuilder:
             user_message=user_message,
             history=history,
             retrieved_chunks=retrieved_chunks,
+            personalization=personalization,
             attachments=attachments,
             attachment_char_limit=attachment_char_limit,
         )
@@ -36,6 +65,7 @@ class PromptBuilder:
         user_message: str,
         history: list[tuple[str, str]],
         retrieved_chunks: list[dict[str, str | float | list[str]]],
+        personalization: dict[str, Any] | None = None,
         attachments: list[dict[str, object]] | None = None,
         attachment_char_limit: int = 15000,
     ) -> list[tuple[str, str]]:
@@ -44,6 +74,7 @@ class PromptBuilder:
             user_message=user_message,
             history=history,
             retrieved_chunks=retrieved_chunks,
+            personalization=personalization,
             attachments=attachments,
             attachment_char_limit=attachment_char_limit,
         )
@@ -55,6 +86,7 @@ class PromptBuilder:
         history: list[tuple[str, str]],
         retrieved_chunks: list[dict[str, str | float | list[str]]],
         draft_answer: str,
+        personalization: dict[str, Any] | None = None,
         attachments: list[dict[str, object]] | None = None,
         attachment_char_limit: int = 15000,
     ) -> list[tuple[str, str]]:
@@ -63,10 +95,11 @@ class PromptBuilder:
             user_message=user_message,
             history=history,
             retrieved_chunks=retrieved_chunks,
+            personalization=personalization,
             attachments=attachments,
             attachment_char_limit=attachment_char_limit,
         )
-        messages.insert(2, ("system", f"[draft answer]\n{draft_answer.strip()}"))
+        messages.insert(3, ("system", f"[draft answer]\n{draft_answer.strip()}"))
         return messages
 
     def _build_messages(
@@ -76,6 +109,7 @@ class PromptBuilder:
         user_message: str,
         history: list[tuple[str, str]],
         retrieved_chunks: list[dict[str, str | float | list[str]]],
+        personalization: dict[str, Any] | None = None,
         attachments: list[dict[str, object]] | None = None,
         attachment_char_limit: int = 15000,
     ) -> list[tuple[str, str]]:
@@ -106,6 +140,7 @@ class PromptBuilder:
         messages: list[tuple[str, str]] = [
             ("system", self.guardrails),
             ("system", assistant_prompt),
+            ("system", self.build_personalization_block(personalization or {})),
             ("system", rag_context),
         ]
         messages.append(("system", self._build_attachment_context(attachments or [], attachment_char_limit)))
@@ -114,6 +149,78 @@ class PromptBuilder:
             messages.append(("system", f"[chat history]\n{history_text}"))
         messages.append(("user", user_message))
         return messages
+
+    def build_personalization_block(self, personalization: dict[str, Any]) -> str:
+        base_style = str(personalization.get("base_style") or "default").strip().lower()
+        warm = str(personalization.get("warm") or "default").strip().lower()
+        enthusiastic = str(personalization.get("enthusiastic") or "default").strip().lower()
+        headers_and_lists = str(personalization.get("headers_and_lists") or "default").strip().lower()
+        custom_instructions = str(personalization.get("custom_instructions") or "").strip()
+        nickname = str(personalization.get("nickname") or "").strip()
+        occupation = str(personalization.get("occupation") or "").strip()
+        more_about_user = str(personalization.get("more_about_user") or "").strip()
+
+        base_style_text = self.personalization_base_style_prompts.get(
+            base_style,
+            self.personalization_base_style_prompts["default"],
+        )
+        characteristics = "\n\n".join(
+            [
+                "\n".join(
+                    [
+                        "Warm:",
+                        self.personalization_characteristic_prompts["warm"].get(
+                            warm,
+                            self.personalization_characteristic_prompts["warm"]["default"],
+                        ),
+                    ]
+                ),
+                "\n".join(
+                    [
+                        "Enthusiastic:",
+                        self.personalization_characteristic_prompts["enthusiastic"].get(
+                            enthusiastic,
+                            self.personalization_characteristic_prompts["enthusiastic"]["default"],
+                        ),
+                    ]
+                ),
+                "\n".join(
+                    [
+                        "Headers and Lists:",
+                        self.personalization_characteristic_prompts["headers-and-lists"].get(
+                            headers_and_lists,
+                            self.personalization_characteristic_prompts["headers-and-lists"]["default"],
+                        ),
+                    ]
+                ),
+            ]
+        )
+
+        if custom_instructions:
+            custom_instructions_text = self.personalization_custom_instructions_template.replace(
+                "{USER_CUSTOM_INSTRUCTIONS}",
+                custom_instructions,
+            )
+        else:
+            custom_instructions_text = "No additional custom instructions provided."
+
+        about_user_parts: list[str] = []
+        if nickname:
+            about_user_parts.append(self.personalization_nickname_template.replace("{NICKNAME}", nickname))
+        if occupation:
+            about_user_parts.append(self.personalization_occupation_template.replace("{OCCUPATION}", occupation))
+        if more_about_user:
+            about_user_parts.append(
+                self.personalization_more_about_user_template.replace("{ABOUT_USER_TEXT}", more_about_user)
+            )
+        about_user_text = "\n\n".join(about_user_parts) if about_user_parts else "No additional user background provided."
+
+        return (
+            self.personalization_template.replace("{BASE_STYLE}", base_style_text)
+            .replace("{CHARACTERISTICS}", characteristics)
+            .replace("{CUSTOM_INSTRUCTIONS}", custom_instructions_text)
+            .replace("{ABOUT_USER}", about_user_text)
+        )
 
     def _build_attachment_context(self, attachments: list[dict[str, object]], char_limit: int) -> str:
         if not attachments:

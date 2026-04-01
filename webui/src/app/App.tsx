@@ -69,7 +69,7 @@ function AppRoutes() {
 
   async function openPreferences(tab: PreferencesTab = "general") {
     setPreferencesTab(tab);
-    await app.loadSettings();
+    await Promise.all([app.loadSettings(), app.loadPersonalization()]);
     if (tab === "filter") {
       await app.loadGlobalFilters();
     }
@@ -204,21 +204,28 @@ function AppRoutes() {
           initialTab={preferencesTab}
           archivedChats={app.archivedChats}
           settingsDraft={app.settingsDraft}
+          personalizationDraft={app.personalizationDraft}
           availableModes={app.settings?.available_assistant_modes ?? ["simple", "refine"]}
           globalFilterTags={app.globalTagFilters}
           loading={app.settingsLoading}
           saving={app.settingsSaving}
+          personalizationLoading={app.personalizationLoading}
+          personalizationSaving={app.personalizationSaving}
           filterLoading={app.filterLoading}
           filterError={app.filterError}
           filterBusyKeys={app.filterBusyKeys}
           error={app.settingsError}
           success={app.settingsSuccess}
+          personalizationError={app.personalizationError}
+          personalizationSuccess={app.personalizationSuccess}
           onClose={() => setPreferencesTab(null)}
           onDownloadChat={(chatId) => void app.downloadChat(chatId)}
           onUnarchiveChat={(chatId) => void app.unarchiveChat(chatId)}
           onDeleteChat={(chatId) => void handleDeleteChat(chatId)}
           onFieldChange={app.updateSettingsDraft}
+          onPersonalizationFieldChange={app.updatePersonalizationDraft}
           onSaveSettings={() => void app.saveSettings()}
+          onSavePersonalization={() => void app.savePersonalization()}
           onOpenFilterTab={() => void app.loadGlobalFilters()}
           onToggleGlobalTag={(tag, isEnabled) => void app.toggleGlobalTagFilter(tag.tag, isEnabled)}
         />

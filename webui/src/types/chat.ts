@@ -92,6 +92,30 @@ export type SettingsUpdate = {
   similarity_score_threshold: number;
 };
 
+export type PersonalizationBaseStyle =
+  | "default"
+  | "professional"
+  | "friendly"
+  | "direct"
+  | "quirky"
+  | "efficient"
+  | "sceptical";
+
+export type PersonalizationLevel = "more" | "default" | "less";
+
+export type Personalization = {
+  base_style: PersonalizationBaseStyle;
+  warm: PersonalizationLevel;
+  enthusiastic: PersonalizationLevel;
+  headers_and_lists: PersonalizationLevel;
+  custom_instructions: string;
+  nickname: string;
+  occupation: string;
+  more_about_user: string;
+};
+
+export type PersonalizationUpdate = Personalization;
+
 export type DownloadMessage = {
   role: "user" | "assistant" | string;
   content: string;
