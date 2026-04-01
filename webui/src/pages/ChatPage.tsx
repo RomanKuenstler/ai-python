@@ -37,9 +37,11 @@ export function ChatPage() {
       sidebar={
         <Sidebar
           chats={chats}
+          gpts={[]}
           activeChatId={activeChatId}
           activeView="chat"
           currentUser={currentUser}
+          onCreateGpt={() => undefined}
           onCreateChat={() => void createChat()}
           onOpenLibrary={() => undefined}
           onOpenAdmin={() => undefined}
@@ -50,11 +52,16 @@ export function ChatPage() {
           onOpenChangePassword={() => undefined}
           onLogout={() => undefined}
           onSelectChat={(chatId) => void ensureChatLoaded(chatId)}
+          onSelectGpt={() => undefined}
           onRenameChat={(chatId, chatName) => void renameChat(chatId, chatName)}
           onArchiveChat={(chatId) => void archiveChat(chatId)}
           onOpenChatFilter={() => undefined}
           onDownloadChat={(chatId) => void downloadChat(chatId)}
           onDeleteChat={(chatId) => void deleteChat(chatId)}
+          onEditGpt={() => undefined}
+          onClearGpt={() => undefined}
+          onDownloadGpt={() => undefined}
+          onDeleteGpt={() => undefined}
         />
       }
       content={

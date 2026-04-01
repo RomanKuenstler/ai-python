@@ -10,6 +10,11 @@ import type {
   FilterFileResponse,
   FilterTag,
   FilterTagResponse,
+  Gpt,
+  GptChat,
+  GptDeleteResponse,
+  GptPreviewRequest,
+  GptUpsert,
   LibraryFile,
   LibraryResponse,
   LibraryUploadResponse,
@@ -172,6 +177,58 @@ export const apiClient = {
   },
   deleteChat(chatId: string) {
     return request<Chat>(`/api/chats/${chatId}`, { method: "DELETE" });
+  },
+  listGpts() {
+    return request<Gpt[]>("/api/gpts");
+  },
+  createGpt(payload: GptUpsert) {
+    return request<Gpt>("/api/gpts", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+  getGpt(gptId: string) {
+    return request<Gpt>(`/api/gpts/${gptId}`);
+  },
+  updateGpt(gptId: string, payload: Partial<GptUpsert>) {
+    return request<Gpt>(`/api/gpts/${gptId}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    });
+  },
+  deleteGpt(gptId: string) {
+    return request<GptDeleteResponse>(`/api/gpts/${gptId}`, { method: "DELETE" });
+  },
+  getGptChat(gptId: string) {
+    return request<GptChat>(`/api/gpts/${gptId}/chat`);
+  },
+  clearGptChat(gptId: string) {
+    return request<GptChat>(`/api/gpts/${gptId}/chat`, { method: "DELETE" });
+  },
+  sendGptMessage(gptId: string, message: string, attachments: File[]) {
+    if (attachments.length === 0) {
+      return request<MessageResponse>(`/api/gpts/${gptId}/messages`, {
+        method: "POST",
+        body: JSON.stringify({ message }),
+      });
+    }
+
+    const formData = new FormData();
+    formData.append("message", message);
+    attachments.forEach((file) => formData.append("files", file));
+    return request<MessageResponse>(`/api/gpts/${gptId}/messages`, {
+      method: "POST",
+      body: formData,
+    });
+  },
+  previewGptMessage(payload: GptPreviewRequest) {
+    return request<MessageResponse>("/api/gpts/preview/messages", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+  downloadGptChat(gptId: string) {
+    return request<ChatDownload>(`/api/gpts/${gptId}/download`);
   },
   downloadChat(chatId: string) {
     return request<ChatDownload>(`/api/chats/${chatId}/download`);

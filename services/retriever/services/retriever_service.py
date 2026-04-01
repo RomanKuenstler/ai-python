@@ -24,6 +24,15 @@ from services.retriever.schemas.auth import AdminUserRead, AuthLoginResponse, Au
 from services.retriever.schemas.chat import (
     ChatDownloadMessageRead,
     ChatDownloadResponse,
+    GptChatRead,
+    GptConfigRead,
+    GptConfigUpdateRequest,
+    GptCreateRequest,
+    GptDeleteResponse,
+    GptPreviewMessageCreateRequest,
+    GptRead,
+    GptSettingsRead,
+    GptUpdateRequest,
     PersonalizationRead,
     PersonalizationUpdateRequest,
     SettingsRead,
@@ -31,7 +40,7 @@ from services.retriever.schemas.chat import (
 )
 from services.retriever.services.chat_naming import generate_chat_name
 from services.retriever.services.library_manager import LibraryManager, UploadFilePayload
-from services.retriever.services.message_mapper import map_attachment, map_chat, map_filter_file, map_filter_tag, map_message, map_source
+from services.retriever.services.message_mapper import map_attachment, map_chat, map_filter_file, map_filter_tag, map_gpt, map_message, map_source
 
 RUNTIME_SETTING_KEYS = {
     "chat_history_messages_count",
@@ -52,6 +61,12 @@ PERSONALIZATION_DEFAULTS = {
 }
 
 PERSONALIZATION_SETTING_KEYS = set(PERSONALIZATION_DEFAULTS)
+GPT_PERSONALIZATION_DEFAULTS = {
+    "base_style": "default",
+    "warm": "default",
+    "enthusiastic": "default",
+    "headers_and_lists": "default",
+}
 logger = logging.getLogger(__name__)
 
 
@@ -210,6 +225,154 @@ class RetrieverAppService:
             ],
         )
 
+    def list_gpts(self, user: UserAccount) -> list[GptRead]:
+        records = self.chat_repository.list_gpts(user.id)
+        result: list[GptRead] = []
+        for record in records:
+            chat = self.chat_repository.get_gpt_chat(user.id, record.id)
+            result.append(map_gpt(record, chat_id=chat.id if chat else None))
+        return result
+
+    def get_gpt(self, user: UserAccount, gpt_id: str) -> GptRead | None:
+        record = self.chat_repository.get_gpt(user.id, gpt_id)
+        if record is None:
+            return None
+        chat = self.chat_repository.get_gpt_chat(user.id, record.id)
+        return map_gpt(record, chat_id=chat.id if chat else None)
+
+    def create_gpt(self, user: UserAccount, payload: GptCreateRequest) -> GptRead:
+        persisted = self.chat_repository.create_gpt(user.id, self._build_gpt_payload(payload))
+        chat = self.chat_repository.ensure_gpt_chat(persisted.id)
+        return map_gpt(persisted, chat_id=chat.id)
+
+    def update_gpt(self, user: UserAccount, gpt_id: str, payload: GptUpdateRequest) -> GptRead | None:
+        fields = self._build_gpt_update_fields(payload)
+        record = self.chat_repository.update_gpt(user.id, gpt_id, fields)
+        if record is None:
+            return None
+        chat = self.chat_repository.ensure_gpt_chat(record.id)
+        return map_gpt(record, chat_id=chat.id)
+
+    def delete_gpt(self, user: UserAccount, gpt_id: str) -> GptDeleteResponse | None:
+        record = self.chat_repository.delete_gpt(user.id, gpt_id)
+        if record is None:
+            return None
+        return GptDeleteResponse(id=record.id, deleted=True)
+
+    def get_gpt_chat(self, user: UserAccount, gpt_id: str) -> GptChatRead | None:
+        gpt = self.chat_repository.get_gpt(user.id, gpt_id)
+        if gpt is None:
+            return None
+        chat = self.chat_repository.ensure_gpt_chat(gpt.id)
+        messages = self.chat_repository.list_gpt_messages(user.id, chat.id, gpt.id)
+        assistant_ids = [message.id for message in messages if message.role == "assistant"]
+        message_ids = [message.id for message in messages]
+        sources_by_message = self.chat_repository.get_sources_by_assistant_message(user.id, assistant_ids)
+        attachments_by_message = self.chat_repository.get_attachments_by_message_ids(message_ids)
+        return GptChatRead(
+            gpt=map_gpt(gpt, chat_id=chat.id),
+            messages=[
+                map_message(message, sources_by_message.get(message.id)).model_copy(
+                    update={"attachments": [map_attachment(item) for item in attachments_by_message.get(message.id, [])]}
+                )
+                for message in messages
+            ],
+        )
+
+    def clear_gpt_chat(self, user: UserAccount, gpt_id: str) -> GptChatRead | None:
+        gpt = self.chat_repository.get_gpt(user.id, gpt_id)
+        if gpt is None:
+            return None
+        chat = self.chat_repository.clear_gpt_chat(user.id, gpt_id)
+        if chat is None:
+            chat = self.chat_repository.ensure_gpt_chat(gpt_id)
+        return GptChatRead(gpt=map_gpt(gpt, chat_id=chat.id), messages=[])
+
+    def download_gpt_chat(self, user: UserAccount, gpt_id: str) -> ChatDownloadResponse | None:
+        payload = self.get_gpt_chat(user, gpt_id)
+        if payload is None or payload.gpt.chat_id is None:
+            return None
+        return ChatDownloadResponse(
+            chat_id=payload.gpt.chat_id,
+            chat_name=payload.gpt.name,
+            is_archived=False,
+            created_at=payload.gpt.created_at,
+            updated_at=payload.gpt.updated_at,
+            messages=[
+                ChatDownloadMessageRead(
+                    role=message.role,
+                    content=message.content,
+                    created_at=message.created_at,
+                    sources=message.sources,
+                    attachments=message.attachments,
+                )
+                for message in payload.messages
+            ],
+        )
+
+    def preview_gpt_message(self, user: UserAccount, payload: GptPreviewMessageCreateRequest) -> dict[str, object]:
+        self._validate_gpt_request(payload.gpt)
+        gpt_payload = payload.gpt
+        gpt_config = self._extract_gpt_runtime_config(gpt_payload.config)
+        retrieved_chunks = self.retrieval_service.retrieve(
+            payload.message.strip(),
+            user_id=user.id,
+            chat_id=None,
+            is_admin=user.role == "admin",
+            gpt_overrides={
+                "files_enabled": gpt_config["files_enabled"],
+                "tags_enabled": gpt_config["tags_enabled"],
+                "file_settings": gpt_config["file_settings"],
+                "tag_settings": gpt_config["tag_settings"],
+            },
+            min_results=gpt_config["settings"]["min_similarities"],
+            max_results=gpt_config["settings"]["max_similarities"],
+            score_threshold=gpt_config["settings"]["similarity_score_threshold"],
+        )
+        history = [(message.role, message.content) for message in payload.preview_messages]
+        response = self._generate_response(
+            assistant_mode=self._resolve_assistant_mode(gpt_payload.assistant_mode),
+            user_content=payload.message.strip(),
+            history=history,
+            retrieved_chunks=retrieved_chunks,
+            personalization=gpt_config["personalization"],
+            gpt_instructions=gpt_payload.instructions,
+            processed_attachments=[],
+        )
+        user_message = {
+            "id": f"preview-user-{len(payload.preview_messages) + 1}",
+            "chat_id": "preview",
+            "gpt_id": None,
+            "role": "user",
+            "content": payload.message.strip(),
+            "status": "completed",
+            "has_attachments": False,
+            "created_at": "2026-04-01T00:00:00Z",
+            "sources": [],
+            "attachments": [],
+        }
+        assistant_message = {
+            "id": f"preview-assistant-{len(payload.preview_messages) + 2}",
+            "chat_id": "preview",
+            "gpt_id": None,
+            "role": "assistant",
+            "content": response,
+            "status": "completed",
+            "has_attachments": False,
+            "created_at": "2026-04-01T00:00:00Z",
+            "sources": [map_source_from_chunk(chunk) for chunk in retrieved_chunks],
+            "attachments": [],
+        }
+        return {
+            "chat_id": "preview",
+            "gpt_id": None,
+            "user_message": user_message,
+            "assistant_message": assistant_message,
+            "assistant_mode": self._resolve_assistant_mode(gpt_payload.assistant_mode),
+            "sources": assistant_message["sources"],
+            "attachments_used": [],
+        }
+
     def list_library_files(self, user: UserAccount):
         return self.library_manager.list_files(user)
 
@@ -333,13 +496,95 @@ class RetrieverAppService:
                 user_content or "",
                 attachments=attachments,
                 assistant_mode=assistant_mode,
-            )
+        )
         return self._send_message_legacy(
             user,
             chat_id or "",
             attachments=attachments,
             assistant_mode=assistant_mode,
         )
+
+    def send_gpt_message(
+        self,
+        user: UserAccount,
+        gpt_id: str,
+        user_content: str,
+        *,
+        attachments: list[tuple[str, bytes]] | None = None,
+    ):
+        gpt = self.chat_repository.get_gpt(user.id, gpt_id)
+        if gpt is None:
+            return None
+
+        gpt_config = self._extract_gpt_runtime_config(map_gpt(gpt).config)
+        chat = self.chat_repository.ensure_gpt_chat(gpt.id)
+        processed_attachments = self._process_attachments(attachments or [])
+        user_message = self.chat_repository.create_message(
+            user.id,
+            chat.id,
+            "user",
+            user_content,
+            gpt_id=gpt.id,
+            has_attachments=bool(processed_attachments),
+        )
+        if processed_attachments:
+            self.chat_repository.add_message_attachments(user_message.id, processed_attachments)
+        history = self.history_service.fetch(
+            chat.id,
+            user_id=user.id,
+            gpt_id=gpt.id,
+            exclude_message_id=user_message.id,
+            limit=gpt_config["settings"]["chat_history_messages_count"],
+        )
+        retrieved_chunks = self.retrieval_service.retrieve(
+            user_content,
+            user_id=user.id,
+            chat_id=chat.id,
+            is_admin=user.role == "admin",
+            gpt_overrides={
+                "files_enabled": gpt_config["files_enabled"],
+                "tags_enabled": gpt_config["tags_enabled"],
+                "file_settings": gpt_config["file_settings"],
+                "tag_settings": gpt_config["tag_settings"],
+            },
+            min_results=gpt_config["settings"]["min_similarities"],
+            max_results=gpt_config["settings"]["max_similarities"],
+            score_threshold=gpt_config["settings"]["similarity_score_threshold"],
+        )
+        response = self._generate_response(
+            assistant_mode=self._resolve_assistant_mode(gpt.assistant_mode),
+            user_content=user_content,
+            history=history,
+            retrieved_chunks=retrieved_chunks,
+            personalization=gpt_config["personalization"],
+            gpt_instructions=gpt.instructions or "",
+            processed_attachments=processed_attachments,
+        )
+        assistant_message = self.chat_repository.create_message(
+            user.id,
+            chat.id,
+            "assistant",
+            response,
+            gpt_id=gpt.id,
+        )
+        self.chat_repository.create_retrieval_logs(
+            assistant_message_id=assistant_message.id,
+            user_message_id=user_message.id,
+            chat_id=chat.id,
+            user_id=user.id,
+            used_chunks=retrieved_chunks,
+        )
+        return {
+            "chat_id": chat.id,
+            "gpt_id": gpt.id,
+            "user_message": map_message(user_message).model_copy(
+                update={"attachments": [map_attachment(item) for item in processed_attachments]}
+            ),
+            "assistant_message": map_message(assistant_message),
+            "assistant_mode": self._resolve_assistant_mode(gpt.assistant_mode),
+            "sources": [map_source_from_chunk(chunk) for chunk in retrieved_chunks],
+            "attachments_used": [map_attachment(item) for item in processed_attachments],
+        }
 
     def _send_message_for_user(
         self,
@@ -380,6 +625,7 @@ class RetrieverAppService:
             history=history,
             retrieved_chunks=retrieved_chunks,
             personalization=personalization.model_dump(),
+            gpt_instructions="",
             processed_attachments=processed_attachments,
         )
         assistant_message = self.chat_repository.create_message(user.id, chat_id, "assistant", response)
@@ -393,6 +639,7 @@ class RetrieverAppService:
 
         return {
             "chat_id": chat_id,
+            "gpt_id": None,
             "user_message": map_message(user_message).model_copy(
                 update={"attachments": [map_attachment(item) for item in processed_attachments]}
             ),
@@ -432,6 +679,7 @@ class RetrieverAppService:
             history=history,
             retrieved_chunks=retrieved_chunks,
             personalization=dict(PERSONALIZATION_DEFAULTS),
+            gpt_instructions="",
             processed_attachments=processed_attachments,
         )
         assistant_message = self.chat_repository.create_message(chat_id, "assistant", response)
@@ -444,6 +692,7 @@ class RetrieverAppService:
 
         return {
             "chat_id": chat_id,
+            "gpt_id": None,
             "user_message": map_message(user_message).model_copy(
                 update={"attachments": [map_attachment(item) for item in processed_attachments]}
             ),
@@ -477,6 +726,7 @@ class RetrieverAppService:
         history: list[tuple[str, str]],
         retrieved_chunks: list[dict[str, str | float | list[str] | None]],
         personalization: dict[str, str],
+        gpt_instructions: str,
         processed_attachments: list[dict[str, object]],
     ) -> str:
         common_kwargs = {
@@ -484,6 +734,7 @@ class RetrieverAppService:
             "history": history,
             "retrieved_chunks": retrieved_chunks,
             "personalization": personalization,
+            "gpt_instructions": gpt_instructions,
             "attachments": processed_attachments,
             "attachment_char_limit": self.settings.attachment_max_total_chars,
         }
@@ -507,6 +758,7 @@ class RetrieverAppService:
         history: list[tuple[str, str]],
         retrieved_chunks: list[dict[str, str | float | list[str] | None]],
         personalization: dict[str, str],
+        gpt_instructions: str,
         attachments: list[dict[str, object]],
         attachment_char_limit: int,
     ) -> str:
@@ -515,6 +767,7 @@ class RetrieverAppService:
             history=history,
             retrieved_chunks=retrieved_chunks,
             personalization=personalization,
+            gpt_instructions=gpt_instructions,
             attachments=attachments,
             attachment_char_limit=attachment_char_limit,
         )
@@ -523,6 +776,7 @@ class RetrieverAppService:
             history=history,
             retrieved_chunks=retrieved_chunks,
             personalization=personalization,
+            gpt_instructions=gpt_instructions,
             planning_result=planning_result,
             attachments=attachments,
             attachment_char_limit=attachment_char_limit,
@@ -532,6 +786,7 @@ class RetrieverAppService:
             history=history,
             retrieved_chunks=retrieved_chunks,
             personalization=personalization,
+            gpt_instructions=gpt_instructions,
             planning_result=planning_result,
             draft_result=draft_result,
             attachments=attachments,
@@ -545,6 +800,7 @@ class RetrieverAppService:
         history: list[tuple[str, str]],
         retrieved_chunks: list[dict[str, str | float | list[str] | None]],
         personalization: dict[str, str],
+        gpt_instructions: str,
         attachments: list[dict[str, object]],
         attachment_char_limit: int,
     ) -> str:
@@ -554,6 +810,7 @@ class RetrieverAppService:
                 history=history,
                 retrieved_chunks=retrieved_chunks,
                 personalization=personalization,
+                gpt_instructions=gpt_instructions,
                 attachments=attachments,
                 attachment_char_limit=attachment_char_limit,
             )
@@ -569,6 +826,7 @@ class RetrieverAppService:
         retrieved_chunks: list[dict[str, str | float | list[str] | None]],
         personalization: dict[str, str],
         planning_result: str,
+        gpt_instructions: str,
         attachments: list[dict[str, object]],
         attachment_char_limit: int,
     ) -> str:
@@ -579,6 +837,7 @@ class RetrieverAppService:
                 retrieved_chunks=retrieved_chunks,
                 planning_result=planning_result,
                 personalization=personalization,
+                gpt_instructions=gpt_instructions,
                 attachments=attachments,
                 attachment_char_limit=attachment_char_limit,
             )
@@ -595,6 +854,7 @@ class RetrieverAppService:
         personalization: dict[str, str],
         planning_result: str,
         draft_result: str,
+        gpt_instructions: str,
         attachments: list[dict[str, object]],
         attachment_char_limit: int,
     ) -> str:
@@ -606,6 +866,7 @@ class RetrieverAppService:
                 planning_result=planning_result,
                 draft_answer=draft_result,
                 personalization=personalization,
+                gpt_instructions=gpt_instructions,
                 attachments=attachments,
                 attachment_char_limit=attachment_char_limit,
             )
@@ -650,6 +911,89 @@ class RetrieverAppService:
             except json.JSONDecodeError:
                 continue
         return stored_values
+
+    def _default_gpt_settings(self) -> dict[str, object]:
+        return {
+            "chat_history_messages_count": self.settings.history_limit,
+            "max_similarities": self.settings.retrieval_max_results,
+            "min_similarities": self.settings.retrieval_min_results,
+            "similarity_score_threshold": self.settings.retrieval_score_threshold,
+            "files_enabled": True,
+            "tags_enabled": True,
+        }
+
+    def _validate_gpt_request(self, payload: GptCreateRequest) -> None:
+        resolved_mode = self._resolve_assistant_mode(payload.assistant_mode)
+        if payload.config.settings.min_similarities > payload.config.settings.max_similarities:
+            raise ValueError("min similarities cannot be greater than max similarities")
+        payload.assistant_mode = resolved_mode
+
+    def _build_gpt_payload(self, payload: GptCreateRequest) -> dict[str, object]:
+        self._validate_gpt_request(payload)
+        return {
+            "name": payload.name.strip(),
+            "description": payload.description.strip(),
+            "instructions": payload.instructions.strip(),
+            "assistant_mode": payload.assistant_mode,
+            "personalization": payload.config.personalization.model_dump(),
+            "settings": {
+                **payload.config.settings.model_dump(),
+                "files_enabled": payload.config.files_enabled,
+                "tags_enabled": payload.config.tags_enabled,
+            },
+            "file_settings": {str(item.file_id): item.is_enabled for item in payload.config.file_settings},
+            "tag_settings": {item.tag: item.is_enabled for item in payload.config.tag_settings},
+        }
+
+    def _build_gpt_update_fields(self, payload: GptUpdateRequest) -> dict[str, object]:
+        fields: dict[str, object] = {}
+        if payload.name is not None:
+            fields["name"] = payload.name.strip()
+        if payload.description is not None:
+            fields["description"] = payload.description.strip()
+        if payload.instructions is not None:
+            fields["instructions"] = payload.instructions.strip()
+        if payload.assistant_mode is not None:
+            fields["assistant_mode"] = self._resolve_assistant_mode(payload.assistant_mode)
+        if payload.config is not None:
+            if payload.config.settings.min_similarities > payload.config.settings.max_similarities:
+                raise ValueError("min similarities cannot be greater than max similarities")
+            fields["personalization"] = payload.config.personalization.model_dump()
+            fields["settings"] = {
+                **payload.config.settings.model_dump(),
+                "files_enabled": payload.config.files_enabled,
+                "tags_enabled": payload.config.tags_enabled,
+            }
+            fields["file_settings"] = {str(item.file_id): item.is_enabled for item in payload.config.file_settings}
+            fields["tag_settings"] = {item.tag: item.is_enabled for item in payload.config.tag_settings}
+        return fields
+
+    def _extract_gpt_runtime_config(self, config: GptConfigRead | GptConfigUpdateRequest) -> dict[str, object]:
+        if isinstance(config, GptConfigUpdateRequest):
+            personalization = config.personalization.model_dump()
+            settings = config.settings.model_dump()
+            file_settings = {item.file_id: item.is_enabled for item in config.file_settings}
+            tag_settings = {item.tag: item.is_enabled for item in config.tag_settings}
+            files_enabled = config.files_enabled
+            tags_enabled = config.tags_enabled
+        else:
+            personalization = config.personalization.model_dump()
+            settings = config.settings.model_dump()
+            file_settings = {item.file_id: item.is_enabled for item in config.file_settings}
+            tag_settings = {item.tag: item.is_enabled for item in config.tag_settings}
+            files_enabled = config.files_enabled
+            tags_enabled = config.tags_enabled
+        return {
+            "personalization": personalization,
+            "settings": {
+                **self._default_gpt_settings(),
+                **settings,
+            },
+            "file_settings": file_settings,
+            "tag_settings": tag_settings,
+            "files_enabled": files_enabled,
+            "tags_enabled": tags_enabled,
+        }
 
 
 def build_retriever_app_service(

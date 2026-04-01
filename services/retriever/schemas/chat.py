@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 class ChatCreateResponse(BaseModel):
     id: str
     chat_name: str
+    gpt_id: str | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -36,6 +37,7 @@ class SourceRead(BaseModel):
 class MessageRead(BaseModel):
     id: str
     chat_id: str
+    gpt_id: str | None = None
     role: str
     content: str
     status: str
@@ -59,6 +61,7 @@ class AttachmentRead(BaseModel):
 
 class MessageCreateResponse(BaseModel):
     chat_id: str
+    gpt_id: str | None = None
     user_message: MessageRead
     assistant_message: MessageRead
     assistant_mode: str
@@ -106,6 +109,106 @@ class PersonalizationUpdateRequest(BaseModel):
     nickname: str = Field(default="", max_length=255)
     occupation: str = Field(default="", max_length=255)
     more_about_user: str = Field(default="", max_length=4000)
+
+
+class GptPersonalizationRead(BaseModel):
+    base_style: PersonalizationBaseStyle = "default"
+    warm: PersonalizationLevel = "default"
+    enthusiastic: PersonalizationLevel = "default"
+    headers_and_lists: PersonalizationLevel = "default"
+
+
+class GptPersonalizationUpdateRequest(BaseModel):
+    base_style: PersonalizationBaseStyle = "default"
+    warm: PersonalizationLevel = "default"
+    enthusiastic: PersonalizationLevel = "default"
+    headers_and_lists: PersonalizationLevel = "default"
+
+
+class GptSettingsRead(BaseModel):
+    chat_history_messages_count: int = 5
+    max_similarities: int = 8
+    min_similarities: int = 2
+    similarity_score_threshold: float = 0.7
+
+
+class GptSettingsUpdateRequest(BaseModel):
+    chat_history_messages_count: int = Field(ge=1, le=50)
+    max_similarities: int = Field(ge=1, le=50)
+    min_similarities: int = Field(ge=1, le=50)
+    similarity_score_threshold: float = Field(ge=0.0, le=1.0)
+
+
+class GptFileSettingRead(BaseModel):
+    file_id: int
+    is_enabled: bool
+
+
+class GptTagSettingRead(BaseModel):
+    tag: str
+    is_enabled: bool
+
+
+class GptConfigRead(BaseModel):
+    personalization: GptPersonalizationRead = Field(default_factory=GptPersonalizationRead)
+    settings: GptSettingsRead = Field(default_factory=GptSettingsRead)
+    files_enabled: bool = True
+    tags_enabled: bool = True
+    file_settings: list[GptFileSettingRead] = Field(default_factory=list)
+    tag_settings: list[GptTagSettingRead] = Field(default_factory=list)
+
+
+class GptConfigUpdateRequest(BaseModel):
+    personalization: GptPersonalizationUpdateRequest = Field(default_factory=GptPersonalizationUpdateRequest)
+    settings: GptSettingsUpdateRequest
+    files_enabled: bool = True
+    tags_enabled: bool = True
+    file_settings: list[GptFileSettingRead] = Field(default_factory=list)
+    tag_settings: list[GptTagSettingRead] = Field(default_factory=list)
+
+
+class GptRead(BaseModel):
+    id: str
+    name: str
+    description: str = ""
+    instructions: str = ""
+    assistant_mode: str
+    chat_id: str | None = None
+    created_at: datetime
+    updated_at: datetime
+    config: GptConfigRead = Field(default_factory=GptConfigRead)
+
+
+class GptCreateRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=255)
+    description: str = Field(default="", max_length=4000)
+    instructions: str = Field(default="", max_length=12000)
+    assistant_mode: str
+    config: GptConfigUpdateRequest
+
+
+class GptUpdateRequest(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=255)
+    description: str | None = Field(default=None, max_length=4000)
+    instructions: str | None = Field(default=None, max_length=12000)
+    assistant_mode: str | None = None
+    config: GptConfigUpdateRequest | None = None
+
+
+class GptPreviewMessageCreateRequest(BaseModel):
+    message: str = Field(min_length=1)
+    gpt: GptCreateRequest
+    preview_messages: list[MessageRead] = Field(default_factory=list)
+
+
+class GptChatRead(BaseModel):
+    gpt: GptRead
+    messages: list[MessageRead] = Field(default_factory=list)
+
+
+class GptDeleteResponse(BaseModel):
+    id: str
+    deleted: bool = True
 
 
 class ChatDownloadMessageRead(BaseModel):

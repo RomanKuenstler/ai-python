@@ -8,6 +8,10 @@ import type {
   Chat,
   FilterFile,
   FilterTag,
+  Gpt,
+  GptChat,
+  GptPreviewRequest,
+  GptUpsert,
   LibraryFile,
   LibraryResponse,
   Message,
@@ -27,6 +31,31 @@ const DEFAULT_PERSONALIZATION: Personalization = {
   nickname: "",
   occupation: "",
   more_about_user: "",
+};
+
+export const DEFAULT_GPT: GptUpsert = {
+  name: "",
+  description: "",
+  instructions: "",
+  assistant_mode: "simple",
+  config: {
+    personalization: {
+      base_style: "default",
+      warm: "default",
+      enthusiastic: "default",
+      headers_and_lists: "default",
+    },
+    settings: {
+      chat_history_messages_count: 5,
+      max_similarities: 8,
+      min_similarities: 2,
+      similarity_score_threshold: 0.7,
+    },
+    files_enabled: true,
+    tags_enabled: true,
+    file_settings: [],
+    tag_settings: [],
+  },
 };
 
 export const ATTACHMENT_MAX_FILES = 3;
@@ -54,6 +83,10 @@ function createOptimisticMessage(
 
 function sortChats(chats: Chat[]) {
   return [...chats].sort((left, right) => right.updated_at.localeCompare(left.updated_at));
+}
+
+function sortGpts(gpts: Gpt[]) {
+  return [...gpts].sort((left, right) => right.updated_at.localeCompare(left.updated_at));
 }
 
 function triggerJsonDownload(fileName: string, data: unknown) {
@@ -93,8 +126,10 @@ export function useChatApp() {
 
   const [bootstrapping, setBootstrapping] = useState(false);
   const [chats, setChats] = useState<Chat[]>([]);
+  const [gpts, setGpts] = useState<Gpt[]>([]);
   const [archivedChats, setArchivedChats] = useState<Chat[]>([]);
   const [messagesByChat, setMessagesByChat] = useState<Record<string, Message[]>>({});
+  const [gptChatsById, setGptChatsById] = useState<Record<string, GptChat>>({});
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [sending, setSending] = useState(false);
@@ -186,13 +221,15 @@ export function useChatApp() {
     setBootstrapping(true);
     setAppError(null);
     try {
-      const [chatList, archivedList, runtimeSettings, personalizationSettings] = await Promise.all([
+      const [chatList, archivedList, runtimeSettings, personalizationSettings, gptList] = await Promise.all([
         apiClient.listChats(),
         apiClient.listArchivedChats(),
         apiClient.getSettings(),
         apiClient.getPersonalization(),
+        apiClient.listGpts(),
       ]);
       setChats(sortChats(chatList));
+      setGpts(gptList);
       setArchivedChats(sortChats(archivedList));
       setSettings(runtimeSettings);
       setSettingsDraft({
@@ -224,8 +261,10 @@ export function useChatApp() {
 
   function clearAppState() {
     setChats([]);
+    setGpts([]);
     setArchivedChats([]);
     setMessagesByChat({});
+    setGptChatsById({});
     setActiveChatId(null);
     setLibrary(null);
     setLibraryError(null);
@@ -402,6 +441,150 @@ export function useChatApp() {
     const payload = await apiClient.downloadChat(chatId);
     const safeName = payload.chat_name.replace(/[^a-z0-9-_]+/gi, "_").replace(/^_+|_+$/g, "") || "chat";
     triggerJsonDownload(`${safeName}-${payload.chat_id}.json`, payload);
+  }
+
+  async function loadGpts() {
+    const payload = await apiClient.listGpts();
+    setGpts(payload);
+    return payload;
+  }
+
+  async function ensureGptChatLoaded(gptId: string) {
+    if (gptChatsById[gptId] !== undefined) {
+      return gptChatsById[gptId];
+    }
+    setLoadingMessages(true);
+    setAppError(null);
+    try {
+      const payload = await apiClient.getGptChat(gptId);
+      setGptChatsById((current) => ({ ...current, [gptId]: payload }));
+      setGpts((current) => current.map((entry) => (entry.id === gptId ? payload.gpt : entry)));
+      return payload;
+    } catch (error) {
+      setAppError(error instanceof Error ? error.message : "Failed to load GPT chat");
+      throw error;
+    } finally {
+      setLoadingMessages(false);
+    }
+  }
+
+  async function createGpt(payload: GptUpsert) {
+    setAppError(null);
+    const created = await apiClient.createGpt(payload);
+    setGpts((current) => sortGpts([created, ...current]));
+    return created;
+  }
+
+  async function updateGpt(gptId: string, payload: Partial<GptUpsert>) {
+    const updated = await apiClient.updateGpt(gptId, payload);
+    setGpts((current) => current.map((entry) => (entry.id === gptId ? updated : entry)));
+    setGptChatsById((current) =>
+      current[gptId]
+        ? {
+            ...current,
+            [gptId]: {
+              ...current[gptId],
+              gpt: updated,
+            },
+          }
+        : current,
+    );
+    return updated;
+  }
+
+  async function deleteGpt(gptId: string) {
+    await apiClient.deleteGpt(gptId);
+    setGpts((current) => current.filter((entry) => entry.id !== gptId));
+    setGptChatsById((current) => {
+      const next = { ...current };
+      delete next[gptId];
+      return next;
+    });
+  }
+
+  async function clearGptChat(gptId: string) {
+    const payload = await apiClient.clearGptChat(gptId);
+    setGptChatsById((current) => ({ ...current, [gptId]: payload }));
+    return payload;
+  }
+
+  async function downloadGptChat(gptId: string) {
+    const payload = await apiClient.downloadGptChat(gptId);
+    const safeName = payload.chat_name.replace(/[^a-z0-9-_]+/gi, "_").replace(/^_+|_+$/g, "") || "gpt";
+    triggerJsonDownload(`${safeName}-${payload.chat_id}.json`, payload);
+  }
+
+  async function sendGptMessage(gptId: string, content: string, attachments: File[] = []) {
+    if (!content.trim() || sending) {
+      return;
+    }
+    const currentGpt = gptChatsById[gptId]?.gpt ?? gpts.find((entry) => entry.id === gptId);
+    if (!currentGpt) {
+      return;
+    }
+
+    const optimisticAttachments = attachments.map<AttachmentMeta>((file) => ({
+      file_name: file.name,
+      file_type: file.name.split(".").pop()?.toLowerCase() ?? "unknown",
+      extraction_method: null,
+      quality: {},
+    }));
+    const optimisticUser = createOptimisticMessage(gptId, "user", content, "completed", optimisticAttachments);
+    const optimisticAssistant = createOptimisticMessage(
+      gptId,
+      "assistant",
+      getPendingAssistantText(currentGpt.assistant_mode),
+      "pending",
+    );
+
+    setSending(true);
+    setAppError(null);
+    setGptChatsById((current) => ({
+      ...current,
+      [gptId]: {
+        ...(current[gptId] ?? { gpt: currentGpt, messages: [] }),
+        messages: [...(current[gptId]?.messages ?? []), optimisticUser, optimisticAssistant],
+      },
+    }));
+
+    try {
+      const response = await apiClient.sendGptMessage(gptId, content, attachments);
+      setGptChatsById((current) => ({
+        ...current,
+        [gptId]: {
+          ...(current[gptId] ?? { gpt: currentGpt, messages: [] }),
+          messages: [
+            ...(current[gptId]?.messages ?? []).filter((message) => message.id !== optimisticUser.id && message.id !== optimisticAssistant.id),
+            response.user_message,
+            { ...response.assistant_message, sources: response.sources },
+          ],
+        },
+      }));
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Failed to send message";
+      setGptChatsById((current) => ({
+        ...current,
+        [gptId]: {
+          ...(current[gptId] ?? { gpt: currentGpt, messages: [] }),
+          messages: [
+            ...(current[gptId]?.messages ?? []).filter((message) => message.id !== optimisticAssistant.id),
+            {
+              ...optimisticAssistant,
+              content: errorMessage,
+              status: "error",
+              error: errorMessage,
+            },
+          ],
+        },
+      }));
+      setAppError(errorMessage);
+    } finally {
+      setSending(false);
+    }
+  }
+
+  async function previewGptMessage(payload: GptPreviewRequest) {
+    return apiClient.previewGptMessage(payload);
   }
 
   async function sendMessage(content: string, attachments: File[] = [], mode: AssistantMode = assistantMode) {
@@ -849,7 +1032,9 @@ export function useChatApp() {
     deleteAdminUser,
     bootstrapping,
     chats,
+    gpts,
     archivedChats,
+    gptChatsById,
     activeChatId,
     activeMessages,
     loadingMessages,
@@ -888,6 +1073,15 @@ export function useChatApp() {
     unarchiveChat,
     deleteChat,
     downloadChat,
+    loadGpts,
+    ensureGptChatLoaded,
+    createGpt,
+    updateGpt,
+    deleteGpt,
+    clearGptChat,
+    downloadGptChat,
+    sendGptMessage,
+    previewGptMessage,
     sendMessage,
     loadSettings,
     loadPersonalization,

@@ -18,14 +18,20 @@ from services.retriever.schemas.auth import (
 )
 from services.retriever.schemas.chat import (
     ChatDownloadResponse,
+    ChatRead,
+    ChatUpdateRequest,
+    ErrorResponse,
     FilterFileListResponse,
     FilterFileRead,
     FilterTagListResponse,
     FilterTagRead,
     FilterUpdateRequest,
-    ChatRead,
-    ChatUpdateRequest,
-    ErrorResponse,
+    GptChatRead,
+    GptCreateRequest,
+    GptDeleteResponse,
+    GptPreviewMessageCreateRequest,
+    GptRead,
+    GptUpdateRequest,
     HealthResponse,
     LibraryFileRead,
     LibraryFileUpdateRequest,
@@ -45,7 +51,7 @@ from services.retriever.services.retriever_service import RetrieverAppService
 
 def create_app() -> FastAPI:
     settings = get_settings()
-    app = FastAPI(title="Local RAG Retriever API", version="11.0.0")
+    app = FastAPI(title="Local RAG Retriever API", version="12.0.0")
 
     origins = [origin.strip() for origin in settings.cors_allowed_origins.split(",") if origin.strip()]
     app.add_middleware(
@@ -239,6 +245,138 @@ def create_app() -> FastAPI:
         if chat is None:
             raise HTTPException(status_code=404, detail="Chat not found")
         return chat
+
+    @app.get("/api/gpts", response_model=list[GptRead])
+    def list_gpts(
+        auth: AuthContext = Depends(get_app_auth_context),
+        service: RetrieverAppService = Depends(get_retriever_service),
+    ) -> list[GptRead]:
+        return service.list_gpts(auth.user)
+
+    @app.post("/api/gpts", response_model=GptRead, responses={422: {"model": ErrorResponse}})
+    def create_gpt(
+        payload: GptCreateRequest,
+        auth: AuthContext = Depends(get_app_auth_context),
+        service: RetrieverAppService = Depends(get_retriever_service),
+    ) -> GptRead:
+        try:
+            return service.create_gpt(auth.user, payload)
+        except ValueError as error:
+            raise HTTPException(status_code=422, detail=str(error)) from error
+
+    @app.get("/api/gpts/{gpt_id}", response_model=GptRead, responses={404: {"model": ErrorResponse}})
+    def get_gpt(
+        gpt_id: str,
+        auth: AuthContext = Depends(get_app_auth_context),
+        service: RetrieverAppService = Depends(get_retriever_service),
+    ) -> GptRead:
+        record = service.get_gpt(auth.user, gpt_id)
+        if record is None:
+            raise HTTPException(status_code=404, detail="GPT not found")
+        return record
+
+    @app.patch("/api/gpts/{gpt_id}", response_model=GptRead, responses={404: {"model": ErrorResponse}, 422: {"model": ErrorResponse}})
+    def update_gpt(
+        gpt_id: str,
+        payload: GptUpdateRequest,
+        auth: AuthContext = Depends(get_app_auth_context),
+        service: RetrieverAppService = Depends(get_retriever_service),
+    ) -> GptRead:
+        try:
+            record = service.update_gpt(auth.user, gpt_id, payload)
+        except ValueError as error:
+            raise HTTPException(status_code=422, detail=str(error)) from error
+        if record is None:
+            raise HTTPException(status_code=404, detail="GPT not found")
+        return record
+
+    @app.delete("/api/gpts/{gpt_id}", response_model=GptDeleteResponse, responses={404: {"model": ErrorResponse}})
+    def delete_gpt(
+        gpt_id: str,
+        auth: AuthContext = Depends(get_app_auth_context),
+        service: RetrieverAppService = Depends(get_retriever_service),
+    ) -> GptDeleteResponse:
+        record = service.delete_gpt(auth.user, gpt_id)
+        if record is None:
+            raise HTTPException(status_code=404, detail="GPT not found")
+        return record
+
+    @app.post("/api/gpts/preview/messages", response_model=MessageCreateResponse, responses={422: {"model": ErrorResponse}})
+    def preview_gpt_message(
+        payload: GptPreviewMessageCreateRequest,
+        auth: AuthContext = Depends(get_app_auth_context),
+        service: RetrieverAppService = Depends(get_retriever_service),
+    ) -> MessageCreateResponse:
+        try:
+            return MessageCreateResponse(**service.preview_gpt_message(auth.user, payload))
+        except ValueError as error:
+            raise HTTPException(status_code=422, detail=str(error)) from error
+
+    @app.get("/api/gpts/{gpt_id}/chat", response_model=GptChatRead, responses={404: {"model": ErrorResponse}})
+    def get_gpt_chat(
+        gpt_id: str,
+        auth: AuthContext = Depends(get_app_auth_context),
+        service: RetrieverAppService = Depends(get_retriever_service),
+    ) -> GptChatRead:
+        record = service.get_gpt_chat(auth.user, gpt_id)
+        if record is None:
+            raise HTTPException(status_code=404, detail="GPT not found")
+        return record
+
+    @app.delete("/api/gpts/{gpt_id}/chat", response_model=GptChatRead, responses={404: {"model": ErrorResponse}})
+    def clear_gpt_chat(
+        gpt_id: str,
+        auth: AuthContext = Depends(get_app_auth_context),
+        service: RetrieverAppService = Depends(get_retriever_service),
+    ) -> GptChatRead:
+        record = service.clear_gpt_chat(auth.user, gpt_id)
+        if record is None:
+            raise HTTPException(status_code=404, detail="GPT not found")
+        return record
+
+    @app.post("/api/gpts/{gpt_id}/messages", response_model=MessageCreateResponse, responses={404: {"model": ErrorResponse}, 422: {"model": ErrorResponse}})
+    async def create_gpt_message(
+        gpt_id: str,
+        request: Request,
+        message: str | None = Form(default=None),
+        files: list[UploadFile] | None = File(default=None),
+        auth: AuthContext = Depends(get_app_auth_context),
+        service: RetrieverAppService = Depends(get_retriever_service),
+    ) -> MessageCreateResponse:
+        content_type = request.headers.get("content-type", "")
+        payload_message = message
+        attachments = files or []
+        if "application/json" in content_type:
+            payload = MessageCreateRequest(**(await request.json()))
+            payload_message = payload.message
+
+        if not payload_message or not payload_message.strip():
+            raise HTTPException(status_code=422, detail="Message cannot be empty")
+
+        try:
+            uploads = [(upload.filename or "attachment.bin", await upload.read()) for upload in attachments]
+            result = service.send_gpt_message(auth.user, gpt_id, payload_message.strip(), attachments=uploads)
+        except ValueError as error:
+            raise HTTPException(status_code=422, detail=str(error)) from error
+        except Exception as error:
+            raise HTTPException(status_code=502, detail=f"Failed to generate assistant response: {error}") from error
+        if result is None:
+            raise HTTPException(status_code=404, detail="GPT not found")
+        return MessageCreateResponse(**result)
+
+    @app.get("/api/gpts/{gpt_id}/download", response_model=ChatDownloadResponse, responses={404: {"model": ErrorResponse}})
+    def download_gpt_chat(
+        gpt_id: str,
+        response: Response,
+        auth: AuthContext = Depends(get_app_auth_context),
+        service: RetrieverAppService = Depends(get_retriever_service),
+    ) -> ChatDownloadResponse:
+        payload = service.download_gpt_chat(auth.user, gpt_id)
+        if payload is None:
+            raise HTTPException(status_code=404, detail="GPT not found")
+        safe_name = "".join(character if character.isalnum() or character in {"-", "_"} else "_" for character in payload.chat_name)
+        response.headers["Content-Disposition"] = f'attachment; filename="{safe_name or "gpt"}-{gpt_id}.json"'
+        return payload
 
     @app.get("/api/chats/{chat_id}/messages", response_model=list[MessageRead], responses={404: {"model": ErrorResponse}})
     def get_messages(

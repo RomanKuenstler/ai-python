@@ -12,6 +12,14 @@ from services.retriever.schemas.chat import (
     ChatRead,
     FilterFileRead,
     FilterTagRead,
+    GptChatRead,
+    GptConfigRead,
+    GptDeleteResponse,
+    GptFileSettingRead,
+    GptPersonalizationRead,
+    GptRead,
+    GptSettingsRead,
+    GptTagSettingRead,
     LibraryFileRead,
     LibraryListResponse,
     LibrarySummaryRead,
@@ -40,6 +48,7 @@ class StubRetrieverService:
         return ChatRead(
             id="chat-1",
             chat_name="chat-abc123",
+            gpt_id=None,
             is_archived=False,
             created_at="2026-03-29T00:00:00Z",
             updated_at="2026-03-29T00:00:00Z",
@@ -63,7 +72,8 @@ class StubRetrieverService:
             return None
         return ChatRead(
             id="chat-1",
-                chat_name=chat_name or "Renamed chat",
+            chat_name=chat_name or "Renamed chat",
+            gpt_id=None,
             is_archived=False,
             created_at="2026-03-29T00:00:00Z",
             updated_at="2026-03-29T00:00:02Z",
@@ -74,6 +84,7 @@ class StubRetrieverService:
             ChatRead(
                 id="chat-2",
                 chat_name="archived-chat",
+                gpt_id=None,
                 is_archived=True,
                 created_at="2026-03-29T00:00:00Z",
                 updated_at="2026-03-29T00:00:03Z",
@@ -88,6 +99,7 @@ class StubRetrieverService:
         return ChatRead(
             id="chat-1",
             chat_name="chat-abc123",
+            gpt_id=None,
             is_archived=True,
             created_at="2026-03-29T00:00:00Z",
             updated_at="2026-03-29T00:00:03Z",
@@ -101,6 +113,7 @@ class StubRetrieverService:
         return ChatRead(
             id="chat-2",
             chat_name="archived-chat",
+            gpt_id=None,
             is_archived=False,
             created_at="2026-03-29T00:00:00Z",
             updated_at="2026-03-29T00:00:04Z",
@@ -122,6 +135,7 @@ class StubRetrieverService:
             MessageRead(
                 id="2",
                 chat_id="chat-1",
+                gpt_id=None,
                 role="assistant",
                 content="Grounded answer",
                 status="completed",
@@ -172,6 +186,7 @@ class StubRetrieverService:
             "user_message": MessageRead(
                 id="1",
                 chat_id="chat-1",
+                gpt_id=None,
                 role="user",
                 content=user_content or "",
                 status="completed",
@@ -183,6 +198,7 @@ class StubRetrieverService:
             "assistant_message": MessageRead(
                 id="2",
                 chat_id="chat-1",
+                gpt_id=None,
                 role="assistant",
                 content="Grounded answer",
                 status="completed",
@@ -441,6 +457,196 @@ class StubRetrieverService:
             update={"scoped_is_enabled": is_enabled, "is_enabled": is_enabled}
         )
 
+    def _sample_gpt(self) -> GptRead:
+        return GptRead(
+            id="gpt-1",
+            name="Docker GPT",
+            description="Answers Docker questions",
+            instructions="Stay focused on Docker and Compose.",
+            assistant_mode="thinking",
+            chat_id="gpt-chat-1",
+            created_at="2026-03-29T00:00:00Z",
+            updated_at="2026-03-29T00:00:00Z",
+            config=GptConfigRead(
+                personalization=GptPersonalizationRead(
+                    base_style="friendly",
+                    warm="more",
+                    enthusiastic="default",
+                    headers_and_lists="more",
+                ),
+                settings=GptSettingsRead(
+                    chat_history_messages_count=4,
+                    max_similarities=7,
+                    min_similarities=2,
+                    similarity_score_threshold=0.65,
+                ),
+                files_enabled=True,
+                tags_enabled=True,
+                file_settings=[GptFileSettingRead(file_id=1, is_enabled=True)],
+                tag_settings=[GptTagSettingRead(tag="docker", is_enabled=True)],
+            ),
+        )
+
+    def list_gpts(self, *_args, **_kwargs) -> list[GptRead]:
+        return [self._sample_gpt()]
+
+    def get_gpt(self, *_args, gpt_id: str | None = None, **_kwargs) -> GptRead | None:
+        if gpt_id is None and _args:
+            gpt_id = _args[-1]
+        if gpt_id != "gpt-1":
+            return None
+        return self._sample_gpt()
+
+    def create_gpt(self, *_args, payload=None, **_kwargs) -> GptRead:
+        if payload is None and _args:
+            payload = _args[-1]
+        base = self._sample_gpt()
+        return base.model_copy(update={"name": payload.name, "description": payload.description, "instructions": payload.instructions, "assistant_mode": payload.assistant_mode, "config": payload.config})
+
+    def update_gpt(self, *_args, gpt_id: str | None = None, payload=None, **_kwargs) -> GptRead | None:
+        if gpt_id is None and len(_args) >= 2:
+            gpt_id = _args[-2]
+            payload = _args[-1]
+        if gpt_id != "gpt-1":
+            return None
+        base = self._sample_gpt()
+        if payload is None:
+            return base
+        updates = payload.model_dump(exclude_unset=True)
+        if "config" in updates and updates["config"] is not None:
+            updates["config"] = payload.config
+        return base.model_copy(update=updates)
+
+    def delete_gpt(self, *_args, gpt_id: str | None = None, **_kwargs) -> GptDeleteResponse | None:
+        if gpt_id is None and _args:
+            gpt_id = _args[-1]
+        if gpt_id != "gpt-1":
+            return None
+        return GptDeleteResponse(id="gpt-1", deleted=True)
+
+    def get_gpt_chat(self, *_args, gpt_id: str | None = None, **_kwargs) -> GptChatRead | None:
+        if gpt_id is None and _args:
+            gpt_id = _args[-1]
+        if gpt_id != "gpt-1":
+            return None
+        return GptChatRead(
+            gpt=self._sample_gpt(),
+            messages=[
+                MessageRead(
+                    id="21",
+                    chat_id="gpt-chat-1",
+                    gpt_id="gpt-1",
+                    role="assistant",
+                    content="Docker-focused answer",
+                    status="completed",
+                    has_attachments=False,
+                    created_at="2026-03-29T00:00:01Z",
+                    sources=[],
+                    attachments=[],
+                )
+            ],
+        )
+
+    def clear_gpt_chat(self, *_args, gpt_id: str | None = None, **_kwargs) -> GptChatRead | None:
+        if gpt_id is None and _args:
+            gpt_id = _args[-1]
+        if gpt_id != "gpt-1":
+            return None
+        return GptChatRead(gpt=self._sample_gpt(), messages=[])
+
+    def send_gpt_message(self, *_args, gpt_id: str | None = None, user_content: str | None = None, attachments=None, **_kwargs):
+        if gpt_id is None and len(_args) >= 3:
+            gpt_id = _args[1]
+            user_content = _args[2]
+        if gpt_id != "gpt-1":
+            return None
+        return {
+            "chat_id": "gpt-chat-1",
+            "gpt_id": "gpt-1",
+            "user_message": MessageRead(
+                id="20",
+                chat_id="gpt-chat-1",
+                gpt_id="gpt-1",
+                role="user",
+                content=user_content or "",
+                status="completed",
+                has_attachments=bool(attachments),
+                created_at="2026-03-29T00:00:00Z",
+                sources=[],
+                attachments=[],
+            ),
+            "assistant_message": MessageRead(
+                id="21",
+                chat_id="gpt-chat-1",
+                gpt_id="gpt-1",
+                role="assistant",
+                content="Docker-focused answer",
+                status="completed",
+                has_attachments=False,
+                created_at="2026-03-29T00:00:01Z",
+                sources=[],
+                attachments=[],
+            ),
+            "assistant_mode": "thinking",
+            "sources": [],
+            "attachments_used": [],
+        }
+
+    def preview_gpt_message(self, *_args, **_kwargs):
+        return {
+            "chat_id": "preview",
+            "gpt_id": None,
+            "user_message": MessageRead(
+                id="preview-user",
+                chat_id="preview",
+                gpt_id=None,
+                role="user",
+                content="hello",
+                status="completed",
+                has_attachments=False,
+                created_at="2026-03-29T00:00:00Z",
+                sources=[],
+                attachments=[],
+            ),
+            "assistant_message": MessageRead(
+                id="preview-assistant",
+                chat_id="preview",
+                gpt_id=None,
+                role="assistant",
+                content="Preview answer",
+                status="completed",
+                has_attachments=False,
+                created_at="2026-03-29T00:00:01Z",
+                sources=[],
+                attachments=[],
+            ),
+            "assistant_mode": "thinking",
+            "sources": [],
+            "attachments_used": [],
+        }
+
+    def download_gpt_chat(self, *_args, gpt_id: str | None = None, **_kwargs) -> ChatDownloadResponse | None:
+        if gpt_id is None and _args:
+            gpt_id = _args[-1]
+        if gpt_id != "gpt-1":
+            return None
+        return ChatDownloadResponse(
+            chat_id="gpt-chat-1",
+            chat_name="Docker GPT",
+            is_archived=False,
+            created_at="2026-03-29T00:00:00Z",
+            updated_at="2026-03-29T00:00:01Z",
+            messages=[
+                {
+                    "role": "assistant",
+                    "content": "Docker-focused answer",
+                    "created_at": "2026-03-29T00:00:01Z",
+                    "sources": [],
+                    "attachments": [],
+                }
+            ],
+        )
+
 
 def build_client() -> TestClient:
     app = create_app()
@@ -615,3 +821,80 @@ def test_filter_endpoints() -> None:
     chat_tag_patch = client.patch("/api/chats/chat-1/tags/docker", json={"is_enabled": False})
     assert chat_tag_patch.status_code == 200
     assert chat_tag_patch.json()["scoped_is_enabled"] is False
+
+
+def test_gpt_endpoints() -> None:
+    client = build_client()
+
+    list_response = client.get("/api/gpts")
+    assert list_response.status_code == 200
+    assert list_response.json()[0]["name"] == "Docker GPT"
+
+    create_response = client.post(
+        "/api/gpts",
+        json={
+            "name": "New GPT",
+            "description": "A test GPT",
+            "instructions": "Stay grounded",
+            "assistant_mode": "thinking",
+            "config": {
+                "personalization": {
+                    "base_style": "friendly",
+                    "warm": "more",
+                    "enthusiastic": "default",
+                    "headers_and_lists": "more",
+                },
+                "settings": {
+                    "chat_history_messages_count": 4,
+                    "max_similarities": 7,
+                    "min_similarities": 2,
+                    "similarity_score_threshold": 0.65,
+                },
+                "files_enabled": True,
+                "tags_enabled": True,
+                "file_settings": [{"file_id": 1, "is_enabled": True}],
+                "tag_settings": [{"tag": "docker", "is_enabled": True}],
+            },
+        },
+    )
+    assert create_response.status_code == 200
+    assert create_response.json()["assistant_mode"] == "thinking"
+
+    get_response = client.get("/api/gpts/gpt-1")
+    assert get_response.status_code == 200
+    assert get_response.json()["config"]["settings"]["max_similarities"] == 7
+
+    patch_response = client.patch("/api/gpts/gpt-1", json={"description": "Updated"})
+    assert patch_response.status_code == 200
+    assert patch_response.json()["description"] == "Updated"
+
+    preview_response = client.post(
+        "/api/gpts/preview/messages",
+        json={
+            "message": "hello",
+            "gpt": create_response.json(),
+            "preview_messages": [],
+        },
+    )
+    assert preview_response.status_code == 200
+    assert preview_response.json()["assistant_message"]["content"] == "Preview answer"
+
+    chat_response = client.get("/api/gpts/gpt-1/chat")
+    assert chat_response.status_code == 200
+    assert chat_response.json()["gpt"]["chat_id"] == "gpt-chat-1"
+
+    message_response = client.post("/api/gpts/gpt-1/messages", json={"message": "hello"})
+    assert message_response.status_code == 200
+    assert message_response.json()["gpt_id"] == "gpt-1"
+
+    clear_response = client.delete("/api/gpts/gpt-1/chat")
+    assert clear_response.status_code == 200
+    assert clear_response.json()["messages"] == []
+
+    download_response = client.get("/api/gpts/gpt-1/download")
+    assert download_response.status_code == 200
+    assert download_response.headers["content-disposition"].endswith('Docker_GPT-gpt-1.json"')
+
+    delete_response = client.delete("/api/gpts/gpt-1")
+    assert delete_response.status_code == 200
+    assert delete_response.json()["deleted"] is True

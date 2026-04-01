@@ -18,6 +18,8 @@ from services.common.models import (
     ChatTagSetting,
     ChunkRecord,
     FileRecord,
+    GPTChatSession,
+    GPTRecord,
     MessageAttachment,
     RetrievalLog,
     SettingRecord,
@@ -195,6 +197,7 @@ class PostgresClient:
         user_id: int,
         chat_id: str | None,
         is_admin: bool,
+        gpt_overrides: dict[str, object] | None = None,
     ) -> list[dict[str, object]]:
         if not candidates:
             return []
@@ -202,12 +205,24 @@ class PostgresClient:
             file_paths = list({str(candidate.get("file_path", "")) for candidate in candidates if candidate.get("file_path")})
             records = list(session.scalars(select(FileRecord).where(FileRecord.file_path.in_(file_paths))))
             file_ids = [record.id for record in records]
-            user_file_settings = self._user_file_settings_map(session, user_id=user_id, file_ids=file_ids)
-            chat_file_settings = self._chat_file_settings_map(session, chat_id=chat_id, file_ids=file_ids)
             tags_in_system = self._all_tags_from_records(records)
-            self._delete_stale_tag_settings(session, user_id=user_id, chat_id=chat_id, valid_tags=tags_in_system)
-            user_tag_settings = self._user_tag_settings_map(session, user_id=user_id, tags=tags_in_system)
-            chat_tag_settings = self._chat_tag_settings_map(session, chat_id=chat_id, tags=tags_in_system)
+            if gpt_overrides:
+                file_settings = {
+                    int(file_id): bool(is_enabled)
+                    for file_id, is_enabled in dict(gpt_overrides.get("file_settings") or {}).items()
+                }
+                tag_settings = {
+                    str(tag): bool(is_enabled)
+                    for tag, is_enabled in dict(gpt_overrides.get("tag_settings") or {}).items()
+                }
+                files_enabled = bool(gpt_overrides.get("files_enabled", True))
+                tags_enabled = bool(gpt_overrides.get("tags_enabled", True))
+            else:
+                user_file_settings = self._user_file_settings_map(session, user_id=user_id, file_ids=file_ids)
+                chat_file_settings = self._chat_file_settings_map(session, chat_id=chat_id, file_ids=file_ids)
+                self._delete_stale_tag_settings(session, user_id=user_id, chat_id=chat_id, valid_tags=tags_in_system)
+                user_tag_settings = self._user_tag_settings_map(session, user_id=user_id, tags=tags_in_system)
+                chat_tag_settings = self._chat_tag_settings_map(session, chat_id=chat_id, tags=tags_in_system)
             file_map = {record.file_path: record for record in records}
             filtered: list[dict[str, object]] = []
             for candidate in candidates:
@@ -215,11 +230,26 @@ class PostgresClient:
                 record = file_map.get(file_path)
                 if record is None:
                     continue
-                global_file_enabled = user_file_settings.get(record.id, True)
-                chat_file_enabled = chat_file_settings.get(record.id, True)
+                if gpt_overrides:
+                    if not record.is_enabled:
+                        continue
+                    if files_enabled and not file_settings.get(record.id, True):
+                        continue
+                else:
+                    global_file_enabled = user_file_settings.get(record.id, True)
+                    chat_file_enabled = chat_file_settings.get(record.id, True)
+                    if not global_file_enabled or not chat_file_enabled:
+                        continue
+                chunk_tags = [str(tag) for tag in list(candidate.get("tags", []) or [])]
+                if gpt_overrides:
+                    if not tags_enabled:
+                        filtered.append(candidate)
+                        continue
+                    if all(tag_settings.get(tag, True) for tag in chunk_tags):
+                        filtered.append(candidate)
+                    continue
                 if not global_file_enabled or not chat_file_enabled:
                     continue
-                chunk_tags = [str(tag) for tag in list(candidate.get("tags", []) or [])]
                 tag_enabled = True
                 for tag in chunk_tags:
                     if not user_tag_settings.get(tag, True):
@@ -409,6 +439,52 @@ class PostgresClient:
                 is_locked=not global_enabled,
             )
 
+    def list_gpt_file_filters(
+        self,
+        *,
+        file_settings: dict[int, bool] | None = None,
+        files_enabled: bool = True,
+    ) -> list[FileFilterState]:
+        with self.session() as session:
+            records = list(session.scalars(select(FileRecord).order_by(FileRecord.file_name.asc())))
+            overrides = file_settings or {}
+            return [
+                FileFilterState(
+                    file_id=record.id,
+                    file_name=record.file_name,
+                    file_path=record.file_path,
+                    tags=list(record.tags or []),
+                    global_is_enabled=record.is_enabled,
+                    scoped_is_enabled=overrides.get(record.id, True) if files_enabled else True,
+                    is_enabled=record.is_enabled and (overrides.get(record.id, True) if files_enabled else True),
+                    is_locked=not record.is_enabled,
+                    updated_at=record.updated_at,
+                )
+                for record in records
+            ]
+
+    def list_gpt_tag_filters(
+        self,
+        *,
+        tag_settings: dict[str, bool] | None = None,
+        tags_enabled: bool = True,
+    ) -> list[TagFilterState]:
+        with self.session() as session:
+            records = list(session.scalars(select(FileRecord)))
+            tag_counts = self._tag_counts(records)
+            overrides = tag_settings or {}
+            return [
+                TagFilterState(
+                    tag=tag,
+                    file_count=count,
+                    global_is_enabled=True,
+                    scoped_is_enabled=overrides.get(tag, True) if tags_enabled else True,
+                    is_enabled=overrides.get(tag, True) if tags_enabled else True,
+                    is_locked=False,
+                )
+                for tag, count in sorted(tag_counts.items())
+            ]
+
     def chunk_counts_by_file_ids(self, file_ids: list[int]) -> dict[int, int]:
         if not file_ids:
             return {}
@@ -432,6 +508,89 @@ class PostgresClient:
         with self.session() as session:
             chat = ChatSession(id=chat_id or None, user_id=user_id, chat_name=chat_name)
             session.add(chat)
+            session.flush()
+            session.refresh(chat)
+            return chat
+
+    def list_gpts(self, *, user_id: int) -> list[GPTRecord]:
+        with self.session() as session:
+            rows = session.scalars(
+                select(GPTRecord).where(GPTRecord.user_id == user_id).order_by(GPTRecord.updated_at.desc(), GPTRecord.created_at.desc())
+            )
+            return list(rows)
+
+    def get_gpt(self, gpt_id: str, *, user_id: int) -> GPTRecord | None:
+        with self.session() as session:
+            return session.scalar(select(GPTRecord).where(GPTRecord.id == gpt_id, GPTRecord.user_id == user_id))
+
+    def create_gpt(self, *, user_id: int, payload: dict[str, object]) -> GPTRecord:
+        with self.session() as session:
+            record = GPTRecord(user_id=user_id, **payload)
+            session.add(record)
+            session.flush()
+            session.refresh(record)
+            return record
+
+    def update_gpt(self, gpt_id: str, *, user_id: int, fields: dict[str, object]) -> GPTRecord | None:
+        with self.session() as session:
+            record = session.scalar(select(GPTRecord).where(GPTRecord.id == gpt_id, GPTRecord.user_id == user_id))
+            if record is None:
+                return None
+            for key, value in fields.items():
+                setattr(record, key, value)
+            record.updated_at = datetime.now(timezone.utc)
+            session.flush()
+            session.refresh(record)
+            return record
+
+    def delete_gpt(self, gpt_id: str, *, user_id: int) -> GPTRecord | None:
+        with self.session() as session:
+            record = session.scalar(select(GPTRecord).where(GPTRecord.id == gpt_id, GPTRecord.user_id == user_id))
+            if record is None:
+                return None
+            chat = session.scalar(select(GPTChatSession).where(GPTChatSession.gpt_id == gpt_id))
+            if chat is not None:
+                session.execute(delete(RetrievalLog).where(RetrievalLog.session_id == chat.id, RetrievalLog.user_id == user_id))
+                session.execute(delete(ChatMessage).where(ChatMessage.session_id == chat.id, ChatMessage.gpt_id == gpt_id))
+                session.delete(chat)
+            session.delete(record)
+            return record
+
+    def ensure_gpt_chat(self, *, gpt_id: str) -> GPTChatSession:
+        with self.session() as session:
+            chat = session.scalar(select(GPTChatSession).where(GPTChatSession.gpt_id == gpt_id))
+            if chat is None:
+                chat = GPTChatSession(gpt_id=gpt_id)
+                session.add(chat)
+                session.flush()
+                session.refresh(chat)
+            return chat
+
+    def get_gpt_chat(self, *, gpt_id: str, user_id: int) -> GPTChatSession | None:
+        with self.session() as session:
+            return session.scalar(
+                select(GPTChatSession)
+                .join(GPTRecord, GPTRecord.id == GPTChatSession.gpt_id)
+                .where(GPTChatSession.gpt_id == gpt_id, GPTRecord.user_id == user_id)
+            )
+
+    def touch_gpt_chat(self, *, gpt_id: str) -> None:
+        with self.session() as session:
+            chat = session.scalar(select(GPTChatSession).where(GPTChatSession.gpt_id == gpt_id))
+            if chat is not None:
+                chat.updated_at = datetime.now(timezone.utc)
+
+    def clear_gpt_chat(self, *, gpt_id: str, user_id: int) -> GPTChatSession | None:
+        with self.session() as session:
+            record = session.scalar(select(GPTRecord).where(GPTRecord.id == gpt_id, GPTRecord.user_id == user_id))
+            if record is None:
+                return None
+            chat = session.scalar(select(GPTChatSession).where(GPTChatSession.gpt_id == gpt_id))
+            if chat is None:
+                return None
+            session.execute(delete(RetrievalLog).where(RetrievalLog.session_id == chat.id, RetrievalLog.user_id == user_id))
+            session.execute(delete(ChatMessage).where(ChatMessage.session_id == chat.id, ChatMessage.gpt_id == gpt_id))
+            chat.updated_at = datetime.now(timezone.utc)
             session.flush()
             session.refresh(chat)
             return chat
@@ -495,30 +654,40 @@ class PostgresClient:
         content: str,
         status: str = "completed",
         *,
+        gpt_id: str | None = None,
         has_attachments: bool = False,
     ) -> ChatMessage:
         with self.session() as session:
             message = ChatMessage(
                 user_id=user_id,
                 session_id=session_id,
+                gpt_id=gpt_id,
                 role=role,
                 content=content,
                 status=status,
                 has_attachments=has_attachments,
             )
             session.add(message)
-            self._touch_chat_in_session(session, session_id, user_id=user_id)
+            if gpt_id:
+                self._touch_gpt_chat_in_session(session, gpt_id)
+            else:
+                self._touch_chat_in_session(session, session_id, user_id=user_id)
             session.flush()
             session.refresh(message)
             return message
 
-    def get_chat_messages(self, chat_id: str, *, user_id: int) -> list[ChatMessage]:
+    def get_chat_messages(self, chat_id: str, *, user_id: int, gpt_id: str | None = None) -> list[ChatMessage]:
         with self.session() as session:
-            rows = session.scalars(
+            query = (
                 select(ChatMessage)
                 .where(ChatMessage.session_id == chat_id, ChatMessage.user_id == user_id)
                 .order_by(ChatMessage.created_at.asc(), ChatMessage.id.asc())
             )
+            if gpt_id is None:
+                query = query.where(ChatMessage.gpt_id.is_(None))
+            else:
+                query = query.where(ChatMessage.gpt_id == gpt_id)
+            rows = session.scalars(query)
             return list(rows)
 
     def add_message_attachments(self, message_id: int, attachments: list[dict[str, object]]) -> list[MessageAttachment]:
@@ -553,14 +722,19 @@ class PostgresClient:
                 grouped.setdefault(row.message_id, []).append(row)
             return grouped
 
-    def get_recent_chat_history(self, session_id: str, *, user_id: int, limit: int) -> list[ChatMessage]:
+    def get_recent_chat_history(self, session_id: str, *, user_id: int, limit: int, gpt_id: str | None = None) -> list[ChatMessage]:
         with self.session() as session:
-            rows = session.scalars(
+            query = (
                 select(ChatMessage)
                 .where(ChatMessage.session_id == session_id, ChatMessage.user_id == user_id)
                 .order_by(ChatMessage.created_at.desc(), ChatMessage.id.desc())
                 .limit(limit * 2)
             )
+            if gpt_id is None:
+                query = query.where(ChatMessage.gpt_id.is_(None))
+            else:
+                query = query.where(ChatMessage.gpt_id == gpt_id)
+            rows = session.scalars(query)
             return list(reversed(list(rows)))
 
     def get_retrieval_logs_for_assistant_messages(self, assistant_message_ids: list[int], *, user_id: int) -> dict[int, list[RetrievalLog]]:
@@ -610,6 +784,11 @@ class PostgresClient:
 
     def _touch_chat_in_session(self, session: Session, chat_id: str, *, user_id: int) -> None:
         chat = session.scalar(select(ChatSession).where(ChatSession.id == chat_id, ChatSession.user_id == user_id))
+        if chat is not None:
+            chat.updated_at = datetime.now(timezone.utc)
+
+    def _touch_gpt_chat_in_session(self, session: Session, gpt_id: str) -> None:
+        chat = session.scalar(select(GPTChatSession).where(GPTChatSession.gpt_id == gpt_id))
         if chat is not None:
             chat.updated_at = datetime.now(timezone.utc)
 
