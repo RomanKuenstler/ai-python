@@ -1,5 +1,30 @@
 # Changelog
 
+## 2026-04-01 18:45 UTC
+
+- Implemented Step 12 user-owned GPTs with isolated personalization, retrieval settings, file and tag overrides, instructions, and assistant mode.
+- Added Alembic-backed GPT persistence with `gpts`, `gpt_chats`, and GPT-owned chat message tracking.
+- Added GPT CRUD, preview, persistent GPT chat, clear, and download API endpoints.
+- Extended retrieval and prompt building so GPT chats ignore user defaults and inject GPT instructions into the prompt flow.
+- Added sidebar GPT navigation, full-width GPT editor and preview UX, persistent GPT chat routing, and locked GPT assistant-mode display in the web UI.
+- Expanded tests, docs, and docker validation for the Step 12 rollout.
+
+## 2026-04-01 01:00 UTC
+
+- Implemented Step 11 `thinking` mode with a three-stage planning, drafting, and refining pipeline in the retriever service.
+- Added dedicated thinking prompt templates plus reusable prompt-builder support for passing prior-step outputs between stages.
+- Extended assistant-mode settings and frontend mode selectors so `thinking` is available anywhere `simple` and `refine` are shown.
+- Added graceful fallback from thinking mode to the simple pipeline when a thinking stage fails.
+- Expanded tests and documentation for prompt composition, API exposure, assistant modes, and Step 11 validation guidance.
+
+## 2026-04-01 00:00 UTC
+
+- Implemented Step 9 user-scoped retrieval filtering with global and chat-level file plus tag settings.
+- Added new Alembic schema for `chat_file_settings`, `user_tag_settings`, and `chat_tag_settings`.
+- Reworked retrieval candidate filtering so file and tag precedence is enforced before score thresholding and response assembly.
+- Added authenticated filter endpoints for user and chat scope and expanded the frontend with global filter management plus chat-specific filter dialogs.
+- Added Step 9 tests for retrieval precedence, locking rules, and API coverage, and documented the filtering model across API, frontend, and testing docs.
+
 ## 2026-03-29 00:00 UTC
 
 - Added a full Step 1 local RAG scaffold with dedicated `embedder` and `retriever` services.

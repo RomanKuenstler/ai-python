@@ -21,6 +21,17 @@ from services.retriever.schemas.chat import (
     ChatRead,
     ChatUpdateRequest,
     ErrorResponse,
+    FilterFileListResponse,
+    FilterFileRead,
+    FilterTagListResponse,
+    FilterTagRead,
+    FilterUpdateRequest,
+    GptChatRead,
+    GptCreateRequest,
+    GptDeleteResponse,
+    GptPreviewMessageCreateRequest,
+    GptRead,
+    GptUpdateRequest,
     HealthResponse,
     LibraryFileRead,
     LibraryFileUpdateRequest,
@@ -29,6 +40,8 @@ from services.retriever.schemas.chat import (
     MessageCreateRequest,
     MessageCreateResponse,
     MessageRead,
+    PersonalizationRead,
+    PersonalizationUpdateRequest,
     SettingsRead,
     SettingsUpdateRequest,
 )
@@ -38,7 +51,7 @@ from services.retriever.services.retriever_service import RetrieverAppService
 
 def create_app() -> FastAPI:
     settings = get_settings()
-    app = FastAPI(title="Local RAG Retriever API", version="8.0.0")
+    app = FastAPI(title="Local RAG Retriever API", version="12.0.0")
 
     origins = [origin.strip() for origin in settings.cors_allowed_origins.split(",") if origin.strip()]
     app.add_middleware(
@@ -233,6 +246,138 @@ def create_app() -> FastAPI:
             raise HTTPException(status_code=404, detail="Chat not found")
         return chat
 
+    @app.get("/api/gpts", response_model=list[GptRead])
+    def list_gpts(
+        auth: AuthContext = Depends(get_app_auth_context),
+        service: RetrieverAppService = Depends(get_retriever_service),
+    ) -> list[GptRead]:
+        return service.list_gpts(auth.user)
+
+    @app.post("/api/gpts", response_model=GptRead, responses={422: {"model": ErrorResponse}})
+    def create_gpt(
+        payload: GptCreateRequest,
+        auth: AuthContext = Depends(get_app_auth_context),
+        service: RetrieverAppService = Depends(get_retriever_service),
+    ) -> GptRead:
+        try:
+            return service.create_gpt(auth.user, payload)
+        except ValueError as error:
+            raise HTTPException(status_code=422, detail=str(error)) from error
+
+    @app.get("/api/gpts/{gpt_id}", response_model=GptRead, responses={404: {"model": ErrorResponse}})
+    def get_gpt(
+        gpt_id: str,
+        auth: AuthContext = Depends(get_app_auth_context),
+        service: RetrieverAppService = Depends(get_retriever_service),
+    ) -> GptRead:
+        record = service.get_gpt(auth.user, gpt_id)
+        if record is None:
+            raise HTTPException(status_code=404, detail="GPT not found")
+        return record
+
+    @app.patch("/api/gpts/{gpt_id}", response_model=GptRead, responses={404: {"model": ErrorResponse}, 422: {"model": ErrorResponse}})
+    def update_gpt(
+        gpt_id: str,
+        payload: GptUpdateRequest,
+        auth: AuthContext = Depends(get_app_auth_context),
+        service: RetrieverAppService = Depends(get_retriever_service),
+    ) -> GptRead:
+        try:
+            record = service.update_gpt(auth.user, gpt_id, payload)
+        except ValueError as error:
+            raise HTTPException(status_code=422, detail=str(error)) from error
+        if record is None:
+            raise HTTPException(status_code=404, detail="GPT not found")
+        return record
+
+    @app.delete("/api/gpts/{gpt_id}", response_model=GptDeleteResponse, responses={404: {"model": ErrorResponse}})
+    def delete_gpt(
+        gpt_id: str,
+        auth: AuthContext = Depends(get_app_auth_context),
+        service: RetrieverAppService = Depends(get_retriever_service),
+    ) -> GptDeleteResponse:
+        record = service.delete_gpt(auth.user, gpt_id)
+        if record is None:
+            raise HTTPException(status_code=404, detail="GPT not found")
+        return record
+
+    @app.post("/api/gpts/preview/messages", response_model=MessageCreateResponse, responses={422: {"model": ErrorResponse}})
+    def preview_gpt_message(
+        payload: GptPreviewMessageCreateRequest,
+        auth: AuthContext = Depends(get_app_auth_context),
+        service: RetrieverAppService = Depends(get_retriever_service),
+    ) -> MessageCreateResponse:
+        try:
+            return MessageCreateResponse(**service.preview_gpt_message(auth.user, payload))
+        except ValueError as error:
+            raise HTTPException(status_code=422, detail=str(error)) from error
+
+    @app.get("/api/gpts/{gpt_id}/chat", response_model=GptChatRead, responses={404: {"model": ErrorResponse}})
+    def get_gpt_chat(
+        gpt_id: str,
+        auth: AuthContext = Depends(get_app_auth_context),
+        service: RetrieverAppService = Depends(get_retriever_service),
+    ) -> GptChatRead:
+        record = service.get_gpt_chat(auth.user, gpt_id)
+        if record is None:
+            raise HTTPException(status_code=404, detail="GPT not found")
+        return record
+
+    @app.delete("/api/gpts/{gpt_id}/chat", response_model=GptChatRead, responses={404: {"model": ErrorResponse}})
+    def clear_gpt_chat(
+        gpt_id: str,
+        auth: AuthContext = Depends(get_app_auth_context),
+        service: RetrieverAppService = Depends(get_retriever_service),
+    ) -> GptChatRead:
+        record = service.clear_gpt_chat(auth.user, gpt_id)
+        if record is None:
+            raise HTTPException(status_code=404, detail="GPT not found")
+        return record
+
+    @app.post("/api/gpts/{gpt_id}/messages", response_model=MessageCreateResponse, responses={404: {"model": ErrorResponse}, 422: {"model": ErrorResponse}})
+    async def create_gpt_message(
+        gpt_id: str,
+        request: Request,
+        message: str | None = Form(default=None),
+        files: list[UploadFile] | None = File(default=None),
+        auth: AuthContext = Depends(get_app_auth_context),
+        service: RetrieverAppService = Depends(get_retriever_service),
+    ) -> MessageCreateResponse:
+        content_type = request.headers.get("content-type", "")
+        payload_message = message
+        attachments = files or []
+        if "application/json" in content_type:
+            payload = MessageCreateRequest(**(await request.json()))
+            payload_message = payload.message
+
+        if not payload_message or not payload_message.strip():
+            raise HTTPException(status_code=422, detail="Message cannot be empty")
+
+        try:
+            uploads = [(upload.filename or "attachment.bin", await upload.read()) for upload in attachments]
+            result = service.send_gpt_message(auth.user, gpt_id, payload_message.strip(), attachments=uploads)
+        except ValueError as error:
+            raise HTTPException(status_code=422, detail=str(error)) from error
+        except Exception as error:
+            raise HTTPException(status_code=502, detail=f"Failed to generate assistant response: {error}") from error
+        if result is None:
+            raise HTTPException(status_code=404, detail="GPT not found")
+        return MessageCreateResponse(**result)
+
+    @app.get("/api/gpts/{gpt_id}/download", response_model=ChatDownloadResponse, responses={404: {"model": ErrorResponse}})
+    def download_gpt_chat(
+        gpt_id: str,
+        response: Response,
+        auth: AuthContext = Depends(get_app_auth_context),
+        service: RetrieverAppService = Depends(get_retriever_service),
+    ) -> ChatDownloadResponse:
+        payload = service.download_gpt_chat(auth.user, gpt_id)
+        if payload is None:
+            raise HTTPException(status_code=404, detail="GPT not found")
+        safe_name = "".join(character if character.isalnum() or character in {"-", "_"} else "_" for character in payload.chat_name)
+        response.headers["Content-Disposition"] = f'attachment; filename="{safe_name or "gpt"}-{gpt_id}.json"'
+        return payload
+
     @app.get("/api/chats/{chat_id}/messages", response_model=list[MessageRead], responses={404: {"model": ErrorResponse}})
     def get_messages(
         chat_id: str,
@@ -243,6 +388,92 @@ def create_app() -> FastAPI:
         if chat is None:
             raise HTTPException(status_code=404, detail="Chat not found")
         return service.get_chat_messages(auth.user, chat_id)
+
+    @app.get("/api/user/files", response_model=FilterFileListResponse)
+    def list_user_files(
+        auth: AuthContext = Depends(get_app_auth_context),
+        service: RetrieverAppService = Depends(get_retriever_service),
+    ) -> FilterFileListResponse:
+        return FilterFileListResponse(**service.list_user_file_filters(auth.user))
+
+    @app.patch("/api/user/files/{file_id}", response_model=FilterFileRead, responses={404: {"model": ErrorResponse}})
+    def update_user_file(
+        file_id: int,
+        payload: FilterUpdateRequest,
+        auth: AuthContext = Depends(get_app_auth_context),
+        service: RetrieverAppService = Depends(get_retriever_service),
+    ) -> FilterFileRead:
+        record = service.update_user_file_filter(auth.user, file_id, is_enabled=payload.is_enabled)
+        if record is None:
+            raise HTTPException(status_code=404, detail="File not found")
+        return record
+
+    @app.get("/api/chats/{chat_id}/files", response_model=FilterFileListResponse, responses={404: {"model": ErrorResponse}})
+    def list_chat_files(
+        chat_id: str,
+        auth: AuthContext = Depends(get_app_auth_context),
+        service: RetrieverAppService = Depends(get_retriever_service),
+    ) -> FilterFileListResponse:
+        records = service.list_chat_file_filters(auth.user, chat_id)
+        if records is None:
+            raise HTTPException(status_code=404, detail="Chat not found")
+        return FilterFileListResponse(**records)
+
+    @app.patch("/api/chats/{chat_id}/files/{file_id}", response_model=FilterFileRead, responses={404: {"model": ErrorResponse}})
+    def update_chat_file(
+        chat_id: str,
+        file_id: int,
+        payload: FilterUpdateRequest,
+        auth: AuthContext = Depends(get_app_auth_context),
+        service: RetrieverAppService = Depends(get_retriever_service),
+    ) -> FilterFileRead:
+        record = service.update_chat_file_filter(auth.user, chat_id, file_id, is_enabled=payload.is_enabled)
+        if record is None:
+            raise HTTPException(status_code=404, detail="Chat or file not found")
+        return record
+
+    @app.get("/api/user/tags", response_model=FilterTagListResponse)
+    def list_user_tags(
+        auth: AuthContext = Depends(get_app_auth_context),
+        service: RetrieverAppService = Depends(get_retriever_service),
+    ) -> FilterTagListResponse:
+        return FilterTagListResponse(**service.list_user_tag_filters(auth.user))
+
+    @app.patch("/api/user/tags/{tag}", response_model=FilterTagRead, responses={404: {"model": ErrorResponse}})
+    def update_user_tag(
+        tag: str,
+        payload: FilterUpdateRequest,
+        auth: AuthContext = Depends(get_app_auth_context),
+        service: RetrieverAppService = Depends(get_retriever_service),
+    ) -> FilterTagRead:
+        record = service.update_user_tag_filter(auth.user, tag, is_enabled=payload.is_enabled)
+        if record is None:
+            raise HTTPException(status_code=404, detail="Tag not found")
+        return record
+
+    @app.get("/api/chats/{chat_id}/tags", response_model=FilterTagListResponse, responses={404: {"model": ErrorResponse}})
+    def list_chat_tags(
+        chat_id: str,
+        auth: AuthContext = Depends(get_app_auth_context),
+        service: RetrieverAppService = Depends(get_retriever_service),
+    ) -> FilterTagListResponse:
+        records = service.list_chat_tag_filters(auth.user, chat_id)
+        if records is None:
+            raise HTTPException(status_code=404, detail="Chat not found")
+        return FilterTagListResponse(**records)
+
+    @app.patch("/api/chats/{chat_id}/tags/{tag}", response_model=FilterTagRead, responses={404: {"model": ErrorResponse}})
+    def update_chat_tag(
+        chat_id: str,
+        tag: str,
+        payload: FilterUpdateRequest,
+        auth: AuthContext = Depends(get_app_auth_context),
+        service: RetrieverAppService = Depends(get_retriever_service),
+    ) -> FilterTagRead:
+        record = service.update_chat_tag_filter(auth.user, chat_id, tag, is_enabled=payload.is_enabled)
+        if record is None:
+            raise HTTPException(status_code=404, detail="Chat or tag not found")
+        return record
 
     @app.post(
         "/api/chats/{chat_id}/messages",
@@ -367,5 +598,20 @@ def create_app() -> FastAPI:
             return service.update_settings(auth.user, payload)
         except ValueError as error:
             raise HTTPException(status_code=422, detail=str(error)) from error
+
+    @app.get("/api/personalization", response_model=PersonalizationRead)
+    def get_personalization(
+        auth: AuthContext = Depends(get_app_auth_context),
+        service: RetrieverAppService = Depends(get_retriever_service),
+    ) -> PersonalizationRead:
+        return service.get_personalization(auth.user)
+
+    @app.patch("/api/personalization", response_model=PersonalizationRead)
+    def update_personalization(
+        payload: PersonalizationUpdateRequest,
+        auth: AuthContext = Depends(get_app_auth_context),
+        service: RetrieverAppService = Depends(get_retriever_service),
+    ) -> PersonalizationRead:
+        return service.update_personalization(auth.user, payload)
 
     return app

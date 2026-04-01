@@ -1,35 +1,45 @@
 import { useEffect, useRef, useState } from "react";
 import { Icon } from "../common/Icons";
-import type { Chat, CurrentUser } from "../../types/chat";
+import type { Chat, CurrentUser, Gpt } from "../../types/chat";
 import { Dialog } from "../common/Dialog";
 
 type SidebarProps = {
   chats: Chat[];
+  gpts: Gpt[];
   activeChatId: string | null;
-  activeView: "chat" | "library" | "admin";
+  activeView: "chat" | "gpt" | "library" | "admin";
   currentUser: CurrentUser;
   onCreateChat: () => void;
+  onCreateGpt: () => void;
   onOpenLibrary: () => void;
   onOpenAdmin: () => void;
   onOpenArchive: () => void;
   onOpenInfo: () => void;
   onOpenHelp: () => void;
-  onOpenPreferences: (tab?: "general" | "personalization" | "settings" | "archive") => void;
+  onOpenPreferences: (tab?: "general" | "personalization" | "settings" | "filter" | "archive") => void;
   onOpenChangePassword: () => void;
   onLogout: () => void;
   onSelectChat: (chatId: string) => void;
+  onSelectGpt: (gptId: string) => void;
   onRenameChat: (chatId: string, chatName: string) => void;
   onArchiveChat: (chatId: string) => void;
+  onOpenChatFilter: (chat: Chat) => void;
   onDownloadChat: (chatId: string) => void;
   onDeleteChat: (chatId: string) => void;
+  onEditGpt: (gptId: string) => void;
+  onClearGpt: (gptId: string) => void;
+  onDownloadGpt: (gptId: string) => void;
+  onDeleteGpt: (gptId: string) => void;
 };
 
 export function Sidebar({
   chats,
+  gpts,
   activeChatId,
   activeView,
   currentUser,
   onCreateChat,
+  onCreateGpt,
   onOpenLibrary,
   onOpenAdmin,
   onOpenArchive,
@@ -39,15 +49,23 @@ export function Sidebar({
   onOpenChangePassword,
   onLogout,
   onSelectChat,
+  onSelectGpt,
   onRenameChat,
   onArchiveChat,
+  onOpenChatFilter,
   onDownloadChat,
   onDeleteChat,
+  onEditGpt,
+  onClearGpt,
+  onDownloadGpt,
+  onDeleteGpt,
 }: SidebarProps) {
   const [menuChatId, setMenuChatId] = useState<string | null>(null);
+  const [menuGptId, setMenuGptId] = useState<string | null>(null);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [renameTarget, setRenameTarget] = useState<Chat | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Chat | null>(null);
+  const [deleteGptTarget, setDeleteGptTarget] = useState<Gpt | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const menuRef = useRef<HTMLDivElement | null>(null);
   const userMenuRef = useRef<HTMLDivElement | null>(null);
@@ -56,6 +74,7 @@ export function Sidebar({
     function handleDocumentClick(event: MouseEvent) {
       if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
         setMenuChatId(null);
+        setMenuGptId(null);
       }
       if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
         setUserMenuOpen(false);
@@ -65,6 +84,7 @@ export function Sidebar({
     function handleEscape(event: KeyboardEvent) {
       if (event.key === "Escape") {
         setMenuChatId(null);
+        setMenuGptId(null);
         setUserMenuOpen(false);
       }
     }
@@ -100,34 +120,95 @@ export function Sidebar({
         </button>
       </div>
 
-      <p className="side-nav-headline">Your chats</p>
+      <div className="side-nav-sections">
+        <p className="side-nav-headline">GPTs</p>
 
-      <div className="side-nav-chat-list" aria-label="Chats">
-        {chats.map((chat) => (
-          <div
-            key={chat.id}
-            className={`side-nav-chat-row${chat.id === activeChatId && activeView === "chat" ? " active" : ""}${
-              menuChatId === chat.id ? " menu-open" : ""
-            }`}
-          >
-            <button className={`side-nav-chat-item${chat.id === activeChatId && activeView === "chat" ? " active" : ""}`} type="button" onClick={() => onSelectChat(chat.id)}>
-              <span>{chat.chat_name}</span>
-            </button>
-            <div className="chat-item-actions" ref={menuChatId === chat.id ? menuRef : null}>
-              <button
-                className="chat-item-actions-trigger"
-                type="button"
-                aria-label={`Chat options for ${chat.chat_name}`}
-                aria-expanded={menuChatId === chat.id}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  setMenuChatId((current) => (current === chat.id ? null : chat.id));
-                }}
-              >
-                <Icon name="dots" className="chat-menu-dots" />
+        <div className="side-nav-chat-list side-nav-gpt-list" aria-label="GPTs">
+          {gpts.map((gpt) => (
+            <div
+              key={gpt.id}
+              className={`side-nav-chat-row${gpt.id === activeChatId && activeView === "gpt" ? " active" : ""}${
+                menuGptId === gpt.id ? " menu-open" : ""
+              }`}
+            >
+              <button className={`side-nav-chat-item${gpt.id === activeChatId && activeView === "gpt" ? " active" : ""}`} type="button" onClick={() => onSelectGpt(gpt.id)}>
+                <span className="side-nav-gpt-item-content">
+                  <span className="side-nav-gpt-icon-shell" aria-hidden="true">
+                    <Icon name="sparkles" className="side-nav-gpt-icon" />
+                  </span>
+                  <span>{gpt.name}</span>
+                </span>
               </button>
-              {menuChatId === chat.id ? (
-                <div className="chat-item-actions-menu" role="menu">
+              <div className="chat-item-actions" ref={menuGptId === gpt.id ? menuRef : null}>
+                <button
+                  className="chat-item-actions-trigger"
+                  type="button"
+                  aria-label={`GPT options for ${gpt.name}`}
+                  aria-expanded={menuGptId === gpt.id}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    setMenuGptId((current) => (current === gpt.id ? null : gpt.id));
+                  }}
+                >
+                  <Icon name="dots" className="chat-menu-dots" />
+                </button>
+                {menuGptId === gpt.id ? (
+                  <div className="chat-item-actions-menu" role="menu">
+                    <button className="chat-item-actions-option" type="button" onClick={() => { onEditGpt(gpt.id); setMenuGptId(null); }}>
+                      <Icon name="edit" />
+                      Edit
+                    </button>
+                    <button className="chat-item-actions-option" type="button" onClick={() => { onClearGpt(gpt.id); setMenuGptId(null); }}>
+                      <Icon name="archive" />
+                      Clear
+                    </button>
+                    <button className="chat-item-actions-option" type="button" onClick={() => { onDownloadGpt(gpt.id); setMenuGptId(null); }}>
+                      <Icon name="download" />
+                      Download
+                    </button>
+                    <button type="button" className="chat-item-actions-option delete" onClick={() => { setDeleteGptTarget(gpt); setMenuGptId(null); }}>
+                      <Icon name="trash" />
+                      Delete
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          ))}
+          <button className="side-nav-item side-nav-item-secondary" type="button" onClick={onCreateGpt}>
+            <span className="side-nav-item-icon">+</span>
+            <span>New GPT</span>
+          </button>
+        </div>
+
+        <p className="side-nav-headline">Your chats</p>
+
+        <div className="side-nav-chat-list side-nav-chat-list-compact" aria-label="Chats">
+          {chats.map((chat) => (
+            <div
+              key={chat.id}
+              className={`side-nav-chat-row${chat.id === activeChatId && activeView === "chat" ? " active" : ""}${
+                menuChatId === chat.id ? " menu-open" : ""
+              }`}
+            >
+              <button className={`side-nav-chat-item${chat.id === activeChatId && activeView === "chat" ? " active" : ""}`} type="button" onClick={() => onSelectChat(chat.id)}>
+                <span>{chat.chat_name}</span>
+              </button>
+              <div className="chat-item-actions" ref={menuChatId === chat.id ? menuRef : null}>
+                <button
+                  className="chat-item-actions-trigger"
+                  type="button"
+                  aria-label={`Chat options for ${chat.chat_name}`}
+                  aria-expanded={menuChatId === chat.id}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    setMenuChatId((current) => (current === chat.id ? null : chat.id));
+                  }}
+                >
+                  <Icon name="dots" className="chat-menu-dots" />
+                </button>
+                {menuChatId === chat.id ? (
+                  <div className="chat-item-actions-menu" role="menu">
                   <button
                     className="chat-item-actions-option"
                     type="button"
@@ -140,7 +221,14 @@ export function Sidebar({
                     <Icon name="edit" />
                     Rename
                   </button>
-                  <button className="chat-item-actions-option" type="button" disabled>
+                  <button
+                    className="chat-item-actions-option"
+                    type="button"
+                    onClick={() => {
+                      onOpenChatFilter(chat);
+                      setMenuChatId(null);
+                    }}
+                  >
                     <Icon name="filter" />
                     Filter
                   </button>
@@ -177,11 +265,12 @@ export function Sidebar({
                     <Icon name="trash" />
                     Delete
                   </button>
-                </div>
-              ) : null}
+                  </div>
+                ) : null}
+              </div>
             </div>
-          </div>
-        ))}
+          ))}
+        </div>
       </div>
 
       <div className="side-nav-bottom">
@@ -286,6 +375,35 @@ export function Sidebar({
         >
           <p>
             Delete <strong>{deleteTarget.chat_name}</strong> and all of its messages?
+          </p>
+        </Dialog>
+      ) : null}
+
+      {deleteGptTarget ? (
+        <Dialog
+          title="Delete GPT?"
+          onClose={() => setDeleteGptTarget(null)}
+          className="dialog-compact delete-chat-dialog"
+          actions={
+            <>
+              <button className="secondary-button" type="button" onClick={() => setDeleteGptTarget(null)}>
+                Keep
+              </button>
+              <button
+                className="danger-button"
+                type="button"
+                onClick={() => {
+                  onDeleteGpt(deleteGptTarget.id);
+                  setDeleteGptTarget(null);
+                }}
+              >
+                Delete
+              </button>
+            </>
+          }
+        >
+          <p>
+            Delete <strong>{deleteGptTarget.name}</strong> and its chat history?
           </p>
         </Dialog>
       ) : null}

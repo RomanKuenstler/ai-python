@@ -5,6 +5,48 @@
 - Retriever API: `http://localhost:8000`
 - Internal embedder attachment API: `http://embedder:8001`
 
+## GPTs
+
+### `GET /api/gpts`
+
+Returns all GPTs owned by the authenticated user.
+
+### `POST /api/gpts`
+
+Creates a GPT and eagerly provisions its persistent GPT chat.
+
+### `GET /api/gpts/{gpt_id}`
+
+Returns one GPT record or `404`.
+
+### `PATCH /api/gpts/{gpt_id}`
+
+Updates GPT metadata and GPT-only configuration.
+
+### `DELETE /api/gpts/{gpt_id}`
+
+Deletes the GPT plus its associated GPT chat history.
+
+### `POST /api/gpts/preview/messages`
+
+Runs a non-persistent preview turn with the submitted GPT draft and ephemeral preview history.
+
+### `GET /api/gpts/{gpt_id}/chat`
+
+Returns the GPT definition plus its persistent GPT chat history.
+
+### `POST /api/gpts/{gpt_id}/messages`
+
+Appends a message to the GPT-owned persistent chat and responds using only GPT configuration.
+
+### `DELETE /api/gpts/{gpt_id}/chat`
+
+Clears the persistent GPT chat while keeping the GPT definition intact.
+
+### `GET /api/gpts/{gpt_id}/download`
+
+Exports the GPT chat as JSON.
+
 ## Chats
 
 ### `POST /api/chats`
@@ -60,14 +102,14 @@ JSON request:
 ```json
 {
   "message": "What does the Docker book say about volumes?",
-  "assistant_mode": "simple"
+  "assistant_mode": "thinking"
 }
 ```
 
 Multipart request:
 
 - `message`: text field
-- `assistant_mode`: `simple` or `refine`
+- `assistant_mode`: `simple`, `refine`, or `thinking`
 - `files`: up to 3 file parts
 
 Response:
@@ -106,7 +148,7 @@ Response:
     "sources": [],
     "attachments": []
   },
-  "assistant_mode": "simple",
+  "assistant_mode": "thinking",
   "sources": [],
   "attachments_used": [
     {
@@ -125,7 +167,7 @@ Response:
 
 ### `GET /api/settings`
 
-Returns live retriever settings and available assistant modes.
+Returns live retriever settings and available assistant modes. Step 11 mode lists may include `simple`, `refine`, and `thinking`.
 
 ### `PATCH /api/settings`
 
@@ -215,3 +257,47 @@ Responses may include:
 - `X-Auth-Max-Expires-At`
 
 When present, the frontend should replace the stored token with the refreshed one.
+
+## Step 9 Filtering
+
+- `GET /api/user/files`
+- `PATCH /api/user/files/{file_id}`
+- `GET /api/user/tags`
+- `PATCH /api/user/tags/{tag}`
+- `GET /api/chats/{chat_id}/files`
+- `PATCH /api/chats/{chat_id}/files/{file_id}`
+- `GET /api/chats/{chat_id}/tags`
+- `PATCH /api/chats/{chat_id}/tags/{tag}`
+
+All filter endpoints are authenticated and user-scoped.
+
+### Response Shape
+
+File filters return:
+
+- `file_id`
+- `file_name`
+- `file_path`
+- `tags`
+- `global_is_enabled`
+- `scoped_is_enabled`
+- `is_enabled`
+- `is_locked`
+- `updated_at`
+
+Tag filters return:
+
+- `tag`
+- `file_count`
+- `global_is_enabled`
+- `scoped_is_enabled`
+- `is_enabled`
+- `is_locked`
+
+`PATCH` requests accept:
+
+```json
+{
+  "is_enabled": false
+}
+```

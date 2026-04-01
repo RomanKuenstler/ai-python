@@ -27,6 +27,45 @@ npm run build
 - frontend production build
 - migration module importability
 
+## Step 9 Checks Covered
+
+- global file filters through both the library page API and the dedicated user filter API
+- chat-level file filters with global disable precedence
+- global tag filters
+- chat-level tag filters with locked global overrides
+- retrieval candidate filtering before score thresholding and result truncation
+
+## Step 11 Checks Covered
+
+- `thinking` mode executes planning, drafting, and refining in sequence
+- `planning_result` is passed into drafting and refining
+- `draft_result` is passed into refining
+- only the final answer is persisted and returned to the API caller
+- shared RAG context, personalization, and chat history stay in the prompt flow
+- thinking-mode failures fall back gracefully to the simple pipeline
+
+## Step 12 Checks Covered
+
+- GPT CRUD API coverage
+- GPT chat fetch, clear, download, and message endpoints
+- GPT preview endpoint coverage
+- frontend production build with GPT routes, editor state, and sidebar integration
+- live docker smoke checks for migration startup, GPT CRUD, preview, and persistent GPT chat
+
+Recommended focused run:
+
+```bash
+./.venv311/bin/pytest tests/test_step6_assistant_modes.py tests/test_step10_personalization.py tests/test_retriever_api.py
+cd webui && npm run build
+```
+
+Step 12 runtime smoke check:
+
+```bash
+docker compose up --build -d
+curl http://localhost:8000/api/health
+```
+
 ## Visual Verification Process
 
 1. Start the stack with `docker compose up --build`.
@@ -50,8 +89,13 @@ npm run build
 
 - Create, open, rename, archive, download, and delete chats.
 - Open Library, upload files, toggle file state, and delete files.
+- Open `Preferences -> Filter` and confirm global file and tag toggles persist.
+- Open a chat menu filter dialog and confirm chat-specific toggles persist.
+- Disable a tag globally and confirm the same tag becomes locked in chat scope.
+- Disable a file globally and confirm chat scope shows it as unavailable.
 - Send messages with and without attachments.
 - Change assistant mode from the composer.
+- Send at least one message with `thinking` mode and confirm only the final answer appears in the chat UI.
 - Open and close sources panels.
 - Open Info, Help, Preferences, and Archive-related dialogs.
 - Confirm archived chat actions still work.
@@ -67,4 +111,5 @@ npm run build
 - If startup fails before the API boots, confirm `alembic` is installed in the active environment.
 - If image attachments fail, verify Tesseract is available in the embedder container.
 - If attachment context seems missing, inspect the retriever logs and confirm `ATTACHMENT_MAX_TOTAL_CHARS` is not overly restrictive.
+- If thinking mode fails, inspect retriever logs for the planning or draft debug entries and confirm the fallback simple response path was used.
 - If the Step 7 visuals look inconsistent, inspect the fixed composer width, sidebar padding, and modal variants first because they establish most of the reference rhythm.

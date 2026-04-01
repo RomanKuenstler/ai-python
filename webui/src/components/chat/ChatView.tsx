@@ -13,6 +13,7 @@ type ChatViewProps = {
     allowedExtensions: string[];
   };
   onSend: (value: string, attachments: File[], mode: AssistantMode) => Promise<void>;
+  variant?: "default" | "embedded";
 };
 
 export function ChatView({
@@ -23,11 +24,12 @@ export function ChatView({
   assistantMode,
   attachmentRules,
   onSend,
+  variant = "default",
 }: ChatViewProps) {
   return (
-    <section className="chat-column">
+    <section className={`chat-column${variant === "embedded" ? " chat-column-embedded" : ""}`}>
       {error ? <p className="chat-error chat-error-banner">{error}</p> : null}
-      <div className="chat-thread-card chat" aria-label="Conversation">
+      <div className={`chat-thread-card chat${variant === "embedded" ? " chat-embedded-thread" : ""}`} aria-label="Conversation">
         <MessageList messages={messages} loadingMessages={loadingMessages} />
       </div>
       <ChatInput
@@ -35,6 +37,7 @@ export function ChatView({
         assistantMode={assistantMode}
         attachmentRules={attachmentRules}
         onSend={onSend}
+        variant={variant}
       />
     </section>
   );

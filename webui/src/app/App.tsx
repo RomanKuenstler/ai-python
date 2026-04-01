@@ -1,8 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ComponentProps } from "react";
 import { BrowserRouter, Navigate, Route, Routes, useLocation, useNavigate, useParams } from "react-router-dom";
 import { AdminPage } from "../components/admin/AdminPage";
 import { ChatView } from "../components/chat/ChatView";
 import { Dialog } from "../components/common/Dialog";
+import { Icon } from "../components/common/Icons";
+import { ChatFilterDialog } from "../components/filters/ChatFilterDialog";
 import { AppShell } from "../components/layout/AppShell";
 import { LibraryPage } from "../components/library/LibraryPage";
 import { PreferencesDialog } from "../components/preferences/PreferencesDialog";
@@ -10,6 +12,7 @@ import { Sidebar } from "../components/sidebar/Sidebar";
 import { useChatApp } from "../hooks/useChatApp";
 import { LoginPage } from "../pages/LoginPage";
 import { PasswordChangePage } from "../pages/PasswordChangePage";
+import { GptEditorPage } from "../pages/GptEditorPage";
 
 type PreferencesTab = "general" | "personalization" | "settings" | "filter" | "archive";
 
@@ -17,11 +20,16 @@ function AppRoutes() {
   const app = useChatApp();
   const navigate = useNavigate();
   const location = useLocation();
-  const activeView = location.pathname.startsWith("/library") ? "library" : location.pathname.startsWith("/admin") ? "admin" : "chat";
+  const currentChatId = location.pathname.startsWith("/chats/") ? location.pathname.split("/")[2] ?? null : null;
+  const currentGptId = location.pathname.startsWith("/gpts/") && location.pathname.endsWith("/chat") ? location.pathname.split("/")[2] ?? null : null;
+  const activeView = location.pathname.startsWith("/library") ? "library" : location.pathname.startsWith("/admin") ? "admin" : currentGptId ? "gpt" : "chat";
+  const activeGptChat = currentGptId ? app.gptChatsById[currentGptId] ?? null : null;
   const [preferencesTab, setPreferencesTab] = useState<PreferencesTab | null>(null);
   const [infoOpen, setInfoOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const [passwordDialogOpen, setPasswordDialogOpen] = useState(false);
+  const [chatFilterChatId, setChatFilterChatId] = useState<string | null>(null);
+  const isGptEditorRoute = location.pathname === "/gpts/new" || /^\/gpts\/[^/]+\/edit$/.test(location.pathname);
 
   useEffect(() => {
     if (!app.isAuthenticated || app.requiresPasswordChange || app.bootstrapping || app.chats.length === 0) {
@@ -29,7 +37,6 @@ function AppRoutes() {
     }
 
     const fallbackChatId = app.activeChatId ?? app.chats[0].id;
-    const currentChatId = location.pathname.startsWith("/chats/") ? location.pathname.split("/")[2] ?? null : null;
 
     if (location.pathname === "/" || location.pathname === "/login") {
       navigate(`/chats/${fallbackChatId}`, { replace: true });
@@ -67,7 +74,10 @@ function AppRoutes() {
 
   async function openPreferences(tab: PreferencesTab = "general") {
     setPreferencesTab(tab);
-    await app.loadSettings();
+    await Promise.all([app.loadSettings(), app.loadPersonalization()]);
+    if (tab === "filter") {
+      await app.loadGlobalFilters();
+    }
   }
 
   async function handleCreateChat() {
@@ -75,9 +85,18 @@ function AppRoutes() {
     navigate(`/chats/${chat.id}`);
   }
 
+  function handleCreateGpt() {
+    navigate("/gpts/new");
+  }
+
   async function handleSelectChat(chatId: string) {
     await app.ensureChatLoaded(chatId);
     navigate(`/chats/${chatId}`);
+  }
+
+  async function handleSelectGpt(gptId: string) {
+    await app.ensureGptChatLoaded(gptId);
+    navigate(`/gpts/${gptId}/chat`);
   }
 
   async function handleRenameChat(chatId: string, chatName: string) {
@@ -102,12 +121,21 @@ function AppRoutes() {
     navigate("/");
   }
 
+  async function handleDeleteGpt(gptId: string) {
+    await app.deleteGpt(gptId);
+    if (currentGptId === gptId) {
+      navigate(app.activeChatId ? `/chats/${app.activeChatId}` : "/");
+    }
+  }
+
   const sidebar = (
     <Sidebar
       chats={app.chats}
-      activeChatId={app.activeChatId}
+      gpts={app.gpts}
+      activeChatId={currentGptId ?? app.activeChatId}
       activeView={activeView}
       currentUser={app.currentUser}
+      onCreateGpt={handleCreateGpt}
       onCreateChat={() => void handleCreateChat()}
       onOpenLibrary={() => navigate("/library")}
       onOpenAdmin={() => navigate("/admin")}
@@ -118,22 +146,91 @@ function AppRoutes() {
       onOpenChangePassword={() => setPasswordDialogOpen(true)}
       onLogout={() => void app.logout()}
       onSelectChat={(chatId) => void handleSelectChat(chatId)}
+      onSelectGpt={(gptId) => void handleSelectGpt(gptId)}
       onRenameChat={(chatId, chatName) => void handleRenameChat(chatId, chatName)}
       onArchiveChat={(chatId) => void handleArchiveChat(chatId)}
+      onOpenChatFilter={(chat) => {
+        setChatFilterChatId(chat.id);
+        void app.loadChatFilters(chat.id);
+      }}
       onDownloadChat={(chatId) => void app.downloadChat(chatId)}
       onDeleteChat={(chatId) => void handleDeleteChat(chatId)}
+      onEditGpt={(gptId) => navigate(`/gpts/${gptId}/edit`)}
+      onClearGpt={(gptId) => void app.clearGptChat(gptId)}
+      onDownloadGpt={(gptId) => void app.downloadGptChat(gptId)}
+      onDeleteGpt={(gptId) => void handleDeleteGpt(gptId)}
     />
   );
+
+  const gptEditorRoutes = (
+    <Routes>
+      <Route
+        path="/gpts/new"
+        element={
+          <GptEditorPage
+            settings={app.settings}
+            libraryFiles={app.library?.files ?? []}
+            attachmentRules={app.attachmentRules}
+            onEnsureLibrary={() => app.loadLibrary().then(() => undefined)}
+            onCreate={app.createGpt}
+            onUpdate={app.updateGpt}
+            onPreview={app.previewGptMessage}
+          />
+        }
+      />
+      <Route
+        path="/gpts/:gptId/edit"
+        element={
+          <GptEditorRoute
+            settings={app.settings}
+            libraryFiles={app.library?.files ?? []}
+            attachmentRules={app.attachmentRules}
+            onEnsureLibrary={() => app.loadLibrary().then(() => undefined)}
+            onCreate={app.createGpt}
+            onUpdate={app.updateGpt}
+            onPreview={app.previewGptMessage}
+          />
+        }
+      />
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
+  );
+
+  if (isGptEditorRoute) {
+    return gptEditorRoutes;
+  }
 
   return (
     <>
       <AppShell
         sidebar={sidebar}
-        assistantMode={app.assistantMode}
-        availableModes={app.settings?.available_assistant_modes ?? ["simple", "refine"]}
-        onAssistantModeChange={app.setAssistantMode}
+        assistantMode={activeGptChat?.gpt.assistant_mode ?? app.assistantMode}
+        availableModes={currentGptId ? [activeGptChat?.gpt.assistant_mode ?? "simple"] : (app.settings?.available_assistant_modes ?? ["simple", "refine", "thinking"])}
+        onAssistantModeChange={currentGptId ? (() => undefined) : app.setAssistantMode}
+        assistantModeLocked={Boolean(currentGptId)}
+        headerRight={
+          currentGptId ? (
+            <div className="header-gpt-badge" aria-label="Active GPT">
+              <span className="header-gpt-badge-icon-shell" aria-hidden="true">
+                <Icon name="sparkles" className="header-gpt-badge-icon" />
+              </span>
+              <span className="header-gpt-badge-copy">
+                <span className="header-gpt-badge-label">GPT Mode</span>
+                <strong className="header-gpt-badge-name">{activeGptChat?.gpt.name ?? "Untitled GPT"}</strong>
+              </span>
+            </div>
+          ) : undefined
+        }
         content={
           <Routes>
+            <Route
+              path="/gpts/:gptId/chat"
+              element={
+                <GptChatRoute
+                  app={app}
+                />
+              }
+            />
             <Route
               path="/library"
               element={
@@ -195,17 +292,44 @@ function AppRoutes() {
           initialTab={preferencesTab}
           archivedChats={app.archivedChats}
           settingsDraft={app.settingsDraft}
-          availableModes={app.settings?.available_assistant_modes ?? ["simple", "refine"]}
+          personalizationDraft={app.personalizationDraft}
+          availableModes={app.settings?.available_assistant_modes ?? ["simple", "refine", "thinking"]}
+          globalFilterTags={app.globalTagFilters}
           loading={app.settingsLoading}
           saving={app.settingsSaving}
+          personalizationLoading={app.personalizationLoading}
+          personalizationSaving={app.personalizationSaving}
+          filterLoading={app.filterLoading}
+          filterError={app.filterError}
+          filterBusyKeys={app.filterBusyKeys}
           error={app.settingsError}
           success={app.settingsSuccess}
+          personalizationError={app.personalizationError}
+          personalizationSuccess={app.personalizationSuccess}
           onClose={() => setPreferencesTab(null)}
           onDownloadChat={(chatId) => void app.downloadChat(chatId)}
           onUnarchiveChat={(chatId) => void app.unarchiveChat(chatId)}
           onDeleteChat={(chatId) => void handleDeleteChat(chatId)}
           onFieldChange={app.updateSettingsDraft}
+          onPersonalizationFieldChange={app.updatePersonalizationDraft}
           onSaveSettings={() => void app.saveSettings()}
+          onSavePersonalization={() => void app.savePersonalization()}
+          onOpenFilterTab={() => void app.loadGlobalFilters()}
+          onToggleGlobalTag={(tag, isEnabled) => void app.toggleGlobalTagFilter(tag.tag, isEnabled)}
+        />
+      ) : null}
+
+      {chatFilterChatId ? (
+        <ChatFilterDialog
+          chatName={app.chats.find((chat) => chat.id === chatFilterChatId)?.chat_name ?? "Chat"}
+          files={app.chatFileFiltersByChat[chatFilterChatId] ?? []}
+          tags={app.chatTagFiltersByChat[chatFilterChatId] ?? []}
+          loading={app.filterLoading && !(app.chatFileFiltersByChat[chatFilterChatId] && app.chatTagFiltersByChat[chatFilterChatId])}
+          error={app.filterError}
+          busyKeys={app.filterBusyKeys}
+          onClose={() => setChatFilterChatId(null)}
+          onToggleTag={(tag, isEnabled) => void app.toggleChatTagFilter(chatFilterChatId, tag.tag, isEnabled)}
+          onToggleFile={(file, isEnabled) => void app.toggleChatFileFilter(chatFilterChatId, file.file_id, isEnabled)}
         />
       ) : null}
 
@@ -322,6 +446,44 @@ function ChatRoute({
       assistantMode={assistantMode}
       attachmentRules={attachmentRules}
       onSend={onSend}
+    />
+  );
+}
+
+function GptEditorRoute(props: ComponentProps<typeof GptEditorPage>) {
+  const params = useParams<{ gptId: string }>();
+  return <GptEditorPage {...props} gptId={params.gptId} />;
+}
+
+function GptChatRoute({
+  app,
+}: {
+  app: ReturnType<typeof useChatApp>;
+}) {
+  const params = useParams<{ gptId: string }>();
+  const gptId = params.gptId ?? "";
+
+  useEffect(() => {
+    if (gptId) {
+      void app.ensureGptChatLoaded(gptId);
+    }
+  }, [app, gptId]);
+
+  const gptChat = app.gptChatsById[gptId];
+
+  if (!gptId) {
+    return <Navigate to="/" replace />;
+  }
+
+  return (
+    <ChatView
+      messages={gptChat?.messages ?? []}
+      sending={app.sending}
+      loadingMessages={app.loadingMessages}
+      error={app.appError}
+      assistantMode={gptChat?.gpt.assistant_mode ?? "simple"}
+      attachmentRules={app.attachmentRules}
+      onSend={(value, attachments) => app.sendGptMessage(gptId, value, attachments)}
     />
   );
 }

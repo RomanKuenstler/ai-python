@@ -29,7 +29,9 @@ def test_retrieval_service_filters_disabled_files() -> None:
         score_threshold=0.5,
         min_results=1,
         max_results=5,
-        enabled_file_paths_lookup=lambda file_paths: {"enabled.md"},
+        candidate_filter=lambda candidates, _user_id, _chat_id, _is_admin: [
+            candidate for candidate in candidates if candidate["file_path"] == "enabled.md"
+        ],
     )
 
     results = service.retrieve("hello")

@@ -1,6 +1,16 @@
 from __future__ import annotations
 
-from services.common.models import ChatMessage, ChatSession, MessageAttachment, RetrievalLog, SettingRecord, UserAccount, UserSessionRecord
+from services.common.models import (
+    ChatMessage,
+    ChatSession,
+    GPTChatSession,
+    GPTRecord,
+    MessageAttachment,
+    RetrievalLog,
+    SettingRecord,
+    UserAccount,
+    UserSessionRecord,
+)
 from services.retriever.postgres_client import RetrieverPostgresClient
 
 
@@ -40,6 +50,7 @@ class ChatRepository:
         content: str,
         status: str = "completed",
         *,
+        gpt_id: str | None = None,
         has_attachments: bool = False,
     ) -> ChatMessage:
         return self.postgres_client.add_chat_message(
@@ -48,6 +59,7 @@ class ChatRepository:
             role,
             content,
             status=status,
+            gpt_id=gpt_id,
             has_attachments=has_attachments,
         )
 
@@ -88,6 +100,66 @@ class ChatRepository:
 
     def upsert_setting(self, user_id: int, key: str, value: str) -> SettingRecord:
         return self.postgres_client.upsert_setting(user_id=user_id, key=key, value=value)
+
+    def list_user_file_filters(self, user_id: int):
+        return self.postgres_client.list_user_file_filters(user_id=user_id)
+
+    def set_user_file_filter(self, user_id: int, file_id: int, is_enabled: bool):
+        return self.postgres_client.set_user_file_filter(user_id=user_id, file_id=file_id, is_enabled=is_enabled)
+
+    def list_chat_file_filters(self, user_id: int, chat_id: str):
+        return self.postgres_client.list_chat_file_filters(user_id=user_id, chat_id=chat_id)
+
+    def set_chat_file_filter(self, user_id: int, chat_id: str, file_id: int, is_enabled: bool):
+        return self.postgres_client.set_chat_file_filter(user_id=user_id, chat_id=chat_id, file_id=file_id, is_enabled=is_enabled)
+
+    def list_user_tag_filters(self, user_id: int):
+        return self.postgres_client.list_user_tag_filters(user_id=user_id)
+
+    def set_user_tag_filter(self, user_id: int, tag: str, is_enabled: bool):
+        return self.postgres_client.set_user_tag_filter(user_id=user_id, tag=tag, is_enabled=is_enabled)
+
+    def list_chat_tag_filters(self, user_id: int, chat_id: str):
+        return self.postgres_client.list_chat_tag_filters(user_id=user_id, chat_id=chat_id)
+
+    def set_chat_tag_filter(self, user_id: int, chat_id: str, tag: str, is_enabled: bool):
+        return self.postgres_client.set_chat_tag_filter(user_id=user_id, chat_id=chat_id, tag=tag, is_enabled=is_enabled)
+
+    def list_gpts(self, user_id: int) -> list[GPTRecord]:
+        return self.postgres_client.list_gpts(user_id=user_id)
+
+    def get_gpt(self, user_id: int, gpt_id: str) -> GPTRecord | None:
+        return self.postgres_client.get_gpt(gpt_id, user_id=user_id)
+
+    def create_gpt(self, user_id: int, payload: dict[str, object]) -> GPTRecord:
+        return self.postgres_client.create_gpt(user_id=user_id, payload=payload)
+
+    def update_gpt(self, user_id: int, gpt_id: str, fields: dict[str, object]) -> GPTRecord | None:
+        return self.postgres_client.update_gpt(gpt_id, user_id=user_id, fields=fields)
+
+    def delete_gpt(self, user_id: int, gpt_id: str) -> GPTRecord | None:
+        return self.postgres_client.delete_gpt(gpt_id, user_id=user_id)
+
+    def ensure_gpt_chat(self, gpt_id: str) -> GPTChatSession:
+        return self.postgres_client.ensure_gpt_chat(gpt_id=gpt_id)
+
+    def get_gpt_chat(self, user_id: int, gpt_id: str) -> GPTChatSession | None:
+        return self.postgres_client.get_gpt_chat(gpt_id=gpt_id, user_id=user_id)
+
+    def clear_gpt_chat(self, user_id: int, gpt_id: str) -> GPTChatSession | None:
+        return self.postgres_client.clear_gpt_chat(gpt_id=gpt_id, user_id=user_id)
+
+    def list_gpt_messages(self, user_id: int, chat_id: str, gpt_id: str) -> list[ChatMessage]:
+        return self.postgres_client.get_chat_messages(chat_id, user_id=user_id, gpt_id=gpt_id)
+
+    def get_recent_gpt_history(self, user_id: int, chat_id: str, gpt_id: str, limit: int) -> list[ChatMessage]:
+        return self.postgres_client.get_recent_chat_history(chat_id, user_id=user_id, limit=limit, gpt_id=gpt_id)
+
+    def list_gpt_file_filters(self, *, file_settings: dict[int, bool] | None = None, files_enabled: bool = True):
+        return self.postgres_client.list_gpt_file_filters(file_settings=file_settings, files_enabled=files_enabled)
+
+    def list_gpt_tag_filters(self, *, tag_settings: dict[str, bool] | None = None, tags_enabled: bool = True):
+        return self.postgres_client.list_gpt_tag_filters(tag_settings=tag_settings, tags_enabled=tags_enabled)
 
     def list_users(self) -> list[UserAccount]:
         return self.postgres_client.list_users()

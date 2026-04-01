@@ -2,15 +2,35 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Icon } from "../common/Icons";
 import type { AssistantMode } from "../../types/chat";
 
+function getModeDescription(mode: AssistantMode) {
+  if (mode === "simple") {
+    return "For everyday simple tasks";
+  }
+  if (mode === "refine") {
+    return "For getting refined answers";
+  }
+  return "For multi-step planning, drafting, and refining";
+}
+
 type AppShellProps = {
   sidebar: ReactNode;
   content: ReactNode;
   assistantMode: AssistantMode;
   availableModes: AssistantMode[];
   onAssistantModeChange: (mode: AssistantMode) => void;
+  assistantModeLocked?: boolean;
+  headerRight?: ReactNode;
 };
 
-export function AppShell({ sidebar, content, assistantMode, availableModes, onAssistantModeChange }: AppShellProps) {
+export function AppShell({
+  sidebar,
+  content,
+  assistantMode,
+  availableModes,
+  onAssistantModeChange,
+  assistantModeLocked = false,
+  headerRight,
+}: AppShellProps) {
   const [modeOpen, setModeOpen] = useState(false);
   const modeRef = useRef<HTMLDivElement | null>(null);
 
@@ -40,37 +60,49 @@ export function AppShell({ sidebar, content, assistantMode, availableModes, onAs
       <header className="topbar">
         <div className="brand">
           <span className="brand-status-light ok" />
-          <h1>PyRAC</h1>
+          <span className="brand-title">PyRAC</span>
         </div>
         <div className="header-center-spacer" />
         <div className="quick-actions">
-          <div className={`header-mode-picker${modeOpen ? " open" : ""}`} ref={modeRef}>
-            <button type="button" className="header-mode-trigger" aria-expanded={modeOpen} onClick={() => setModeOpen((current) => !current)}>
-              <span className="header-mode-label">{assistantMode.toUpperCase()}</span>
-              <Icon name="chevron-down" className="header-mode-chevron" />
-            </button>
-            {modeOpen ? (
-              <div className="header-mode-menu" role="menu">
-              {availableModes.map((mode) => (
-                  <button
-                    key={mode}
-                    type="button"
-                    className={`header-mode-option${mode === assistantMode ? " active" : ""}`}
-                    onClick={() => {
-                      onAssistantModeChange(mode);
-                      setModeOpen(false);
-                    }}
-                  >
-                    <span className="header-mode-option-copy">
-                      <strong>{mode[0].toUpperCase() + mode.slice(1)}</strong>
-                      <small>{mode === "simple" ? "For everyday simple tasks" : "For getting refined answers"}</small>
-                    </span>
-                    {mode === assistantMode ? <Icon name="check" className="header-mode-option-check" /> : null}
-                  </button>
-                ))}
-              </div>
-            ) : null}
-          </div>
+          {headerRight ?? (
+            <div className={`header-mode-picker${modeOpen ? " open" : ""}`} ref={modeRef}>
+              <button
+                type="button"
+                className="header-mode-trigger"
+                aria-expanded={modeOpen}
+                disabled={assistantModeLocked}
+                onClick={() => {
+                  if (!assistantModeLocked) {
+                    setModeOpen((current) => !current);
+                  }
+                }}
+              >
+                <span className="header-mode-label">{assistantMode.toUpperCase()}</span>
+                <Icon name="chevron-down" className="header-mode-chevron" />
+              </button>
+              {modeOpen && !assistantModeLocked ? (
+                <div className="header-mode-menu" role="menu">
+                {availableModes.map((mode) => (
+                    <button
+                      key={mode}
+                      type="button"
+                      className={`header-mode-option${mode === assistantMode ? " active" : ""}`}
+                      onClick={() => {
+                        onAssistantModeChange(mode);
+                        setModeOpen(false);
+                      }}
+                    >
+                      <span className="header-mode-option-copy">
+                        <strong>{mode[0].toUpperCase() + mode.slice(1)}</strong>
+                        <small>{getModeDescription(mode)}</small>
+                      </span>
+                      {mode === assistantMode ? <Icon name="check" className="header-mode-option-check" /> : null}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          )}
         </div>
       </header>
       <aside className="side-nav">{sidebar}</aside>

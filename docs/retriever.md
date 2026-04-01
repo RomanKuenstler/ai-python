@@ -17,9 +17,11 @@ The retriever now has two entry points:
 8. Route the request by assistant mode:
    - `simple`: one prompt pass with `prompts/assistant.md`
    - `refine`: draft prompt plus refinement prompt
-9. Call the configured local LLM endpoint.
-10. Store only the final assistant message and retrieval evidence in PostgreSQL.
-11. Return structured JSON to the web UI or print the formatted source section in the CLI.
+   - `thinking`: planning prompt plus drafting prompt plus refining prompt
+9. Reuse the same retrieved evidence across all stages for multi-step modes.
+10. Call the configured local LLM endpoint.
+11. Store only the final assistant message and retrieval evidence in PostgreSQL.
+12. Return structured JSON to the web UI or print the formatted source section in the CLI.
 
 ## Score Semantics
 
