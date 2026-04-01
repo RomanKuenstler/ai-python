@@ -10,6 +10,8 @@ from services.retriever.schemas.chat import (
     AttachmentRead,
     ChatDownloadResponse,
     ChatRead,
+    FilterFileRead,
+    FilterTagRead,
     LibraryFileRead,
     LibraryListResponse,
     LibrarySummaryRead,
@@ -313,6 +315,114 @@ class StubRetrieverService:
             return None
         return self.list_library_files().files[0]
 
+    def list_user_file_filters(self, *_args, **_kwargs):
+        return {
+            "files": [
+                FilterFileRead(
+                    file_id=1,
+                    file_name="manual.pdf",
+                    file_path="/app/data/manual.pdf",
+                    tags=["docker"],
+                    global_is_enabled=True,
+                    scoped_is_enabled=True,
+                    is_enabled=True,
+                    is_locked=False,
+                    updated_at="2026-03-29T00:00:00Z",
+                )
+            ]
+        }
+
+    def update_user_file_filter(self, *_args, file_id: int | None = None, is_enabled: bool = True, **_kwargs):
+        if file_id is None and _args:
+            file_id = _args[-1]
+        if file_id != 1:
+            return None
+        return self.list_user_file_filters()["files"][0].model_copy(
+            update={"global_is_enabled": is_enabled, "scoped_is_enabled": is_enabled, "is_enabled": is_enabled}
+        )
+
+    def list_chat_file_filters(self, *_args, chat_id: str | None = None, **_kwargs):
+        if chat_id is None and _args:
+            chat_id = _args[-1]
+        if chat_id != "chat-1":
+            return None
+        return {
+            "files": [
+                FilterFileRead(
+                    file_id=1,
+                    file_name="manual.pdf",
+                    file_path="/app/data/manual.pdf",
+                    tags=["docker"],
+                    global_is_enabled=True,
+                    scoped_is_enabled=True,
+                    is_enabled=True,
+                    is_locked=False,
+                    updated_at="2026-03-29T00:00:00Z",
+                )
+            ]
+        }
+
+    def update_chat_file_filter(self, *_args, chat_id: str | None = None, file_id: int | None = None, is_enabled: bool = True, **_kwargs):
+        if chat_id is None and len(_args) >= 2:
+            chat_id = _args[-2]
+            file_id = _args[-1]
+        if chat_id != "chat-1" or file_id != 1:
+            return None
+        return self.list_chat_file_filters(chat_id="chat-1")["files"][0].model_copy(
+            update={"scoped_is_enabled": is_enabled, "is_enabled": is_enabled}
+        )
+
+    def list_user_tag_filters(self, *_args, **_kwargs):
+        return {
+            "tags": [
+                FilterTagRead(
+                    tag="docker",
+                    file_count=1,
+                    global_is_enabled=True,
+                    scoped_is_enabled=True,
+                    is_enabled=True,
+                    is_locked=False,
+                )
+            ]
+        }
+
+    def update_user_tag_filter(self, *_args, tag: str | None = None, is_enabled: bool = True, **_kwargs):
+        if tag is None and _args:
+            tag = _args[-1]
+        if tag != "docker":
+            return None
+        return self.list_user_tag_filters()["tags"][0].model_copy(
+            update={"global_is_enabled": is_enabled, "scoped_is_enabled": is_enabled, "is_enabled": is_enabled}
+        )
+
+    def list_chat_tag_filters(self, *_args, chat_id: str | None = None, **_kwargs):
+        if chat_id is None and _args:
+            chat_id = _args[-1]
+        if chat_id != "chat-1":
+            return None
+        return {
+            "tags": [
+                FilterTagRead(
+                    tag="docker",
+                    file_count=1,
+                    global_is_enabled=True,
+                    scoped_is_enabled=True,
+                    is_enabled=True,
+                    is_locked=False,
+                )
+            ]
+        }
+
+    def update_chat_tag_filter(self, *_args, chat_id: str | None = None, tag: str | None = None, is_enabled: bool = True, **_kwargs):
+        if chat_id is None and len(_args) >= 2:
+            chat_id = _args[-2]
+            tag = _args[-1]
+        if chat_id != "chat-1" or tag != "docker":
+            return None
+        return self.list_chat_tag_filters(chat_id="chat-1")["tags"][0].model_copy(
+            update={"scoped_is_enabled": is_enabled, "is_enabled": is_enabled}
+        )
+
 
 def build_client() -> TestClient:
     app = create_app()
@@ -429,3 +539,39 @@ def test_download_and_settings_endpoints() -> None:
     )
     assert patch_response.status_code == 200
     assert patch_response.json()["similarity_score_threshold"] == 0.75
+
+
+def test_filter_endpoints() -> None:
+    client = build_client()
+
+    user_files = client.get("/api/user/files")
+    assert user_files.status_code == 200
+    assert user_files.json()["files"][0]["file_name"] == "manual.pdf"
+
+    user_file_patch = client.patch("/api/user/files/1", json={"is_enabled": False})
+    assert user_file_patch.status_code == 200
+    assert user_file_patch.json()["is_enabled"] is False
+
+    user_tags = client.get("/api/user/tags")
+    assert user_tags.status_code == 200
+    assert user_tags.json()["tags"][0]["tag"] == "docker"
+
+    user_tag_patch = client.patch("/api/user/tags/docker", json={"is_enabled": False})
+    assert user_tag_patch.status_code == 200
+    assert user_tag_patch.json()["is_enabled"] is False
+
+    chat_files = client.get("/api/chats/chat-1/files")
+    assert chat_files.status_code == 200
+    assert chat_files.json()["files"][0]["file_id"] == 1
+
+    chat_file_patch = client.patch("/api/chats/chat-1/files/1", json={"is_enabled": False})
+    assert chat_file_patch.status_code == 200
+    assert chat_file_patch.json()["scoped_is_enabled"] is False
+
+    chat_tags = client.get("/api/chats/chat-1/tags")
+    assert chat_tags.status_code == 200
+    assert chat_tags.json()["tags"][0]["tag"] == "docker"
+
+    chat_tag_patch = client.patch("/api/chats/chat-1/tags/docker", json={"is_enabled": False})
+    assert chat_tag_patch.status_code == 200
+    assert chat_tag_patch.json()["scoped_is_enabled"] is False

@@ -6,6 +6,8 @@ import type {
   AttachmentMeta,
   AuthSession,
   Chat,
+  FilterFile,
+  FilterTag,
   LibraryFile,
   LibraryResponse,
   Message,
@@ -87,6 +89,13 @@ export function useChatApp() {
   const [settingsSaving, setSettingsSaving] = useState(false);
   const [settingsError, setSettingsError] = useState<string | null>(null);
   const [settingsSuccess, setSettingsSuccess] = useState<string | null>(null);
+  const [globalFileFilters, setGlobalFileFilters] = useState<FilterFile[]>([]);
+  const [globalTagFilters, setGlobalTagFilters] = useState<FilterTag[]>([]);
+  const [chatFileFiltersByChat, setChatFileFiltersByChat] = useState<Record<string, FilterFile[]>>({});
+  const [chatTagFiltersByChat, setChatTagFiltersByChat] = useState<Record<string, FilterTag[]>>({});
+  const [filterLoading, setFilterLoading] = useState(false);
+  const [filterError, setFilterError] = useState<string | null>(null);
+  const [filterBusyKeys, setFilterBusyKeys] = useState<string[]>([]);
 
   useEffect(() => subscribeAuthSession(setAuthSession), []);
 
@@ -191,6 +200,11 @@ export function useChatApp() {
     setLibraryError(null);
     setSettings(null);
     setSettingsDraft(null);
+    setGlobalFileFilters([]);
+    setGlobalTagFilters([]);
+    setChatFileFiltersByChat({});
+    setChatTagFiltersByChat({});
+    setFilterError(null);
     setAdminUsers([]);
     setAdminError(null);
     clearAppSessionState();
@@ -471,6 +485,8 @@ export function useChatApp() {
     try {
       const payload = await apiClient.listLibraryFiles();
       setLibrary(payload);
+      const userFiles = await apiClient.listUserFiles();
+      setGlobalFileFilters(userFiles.files);
     } catch (error) {
       setLibraryError(error instanceof Error ? error.message : "Failed to load library");
     } finally {
@@ -493,6 +509,25 @@ export function useChatApp() {
               files: current.files.map((entry) => (entry.id === file.id ? updated : entry)),
             }
           : current,
+      );
+      const globalUpdated = await apiClient.updateUserFile(file.id, { is_enabled: !file.is_enabled });
+      setGlobalFileFilters((current) => current.map((entry) => (entry.file_id === file.id ? globalUpdated : entry)));
+      setChatFileFiltersByChat((current) =>
+        Object.fromEntries(
+          Object.entries(current).map(([chatId, entries]) => [
+            chatId,
+            entries.map((entry) =>
+              entry.file_id === file.id
+                ? {
+                    ...entry,
+                    global_is_enabled: globalUpdated.global_is_enabled,
+                    is_enabled: globalUpdated.global_is_enabled && entry.scoped_is_enabled,
+                    is_locked: !globalUpdated.global_is_enabled,
+                  }
+                : entry,
+            ),
+          ]),
+        ),
       );
     } catch (error) {
       setLibraryError(error instanceof Error ? error.message : "Failed to update file");
@@ -582,6 +617,138 @@ export function useChatApp() {
     }
   }
 
+  async function loadGlobalFilters() {
+    setFilterLoading(true);
+    setFilterError(null);
+    try {
+      const [files, tags] = await Promise.all([apiClient.listUserFiles(), apiClient.listUserTags()]);
+      setGlobalFileFilters(files.files);
+      setGlobalTagFilters(tags.tags);
+    } catch (error) {
+      setFilterError(error instanceof Error ? error.message : "Failed to load filters");
+    } finally {
+      setFilterLoading(false);
+    }
+  }
+
+  async function loadChatFilters(chatId: string) {
+    setFilterLoading(true);
+    setFilterError(null);
+    try {
+      const [files, tags] = await Promise.all([apiClient.listChatFiles(chatId), apiClient.listChatTags(chatId)]);
+      setChatFileFiltersByChat((current) => ({ ...current, [chatId]: files.files }));
+      setChatTagFiltersByChat((current) => ({ ...current, [chatId]: tags.tags }));
+    } catch (error) {
+      setFilterError(error instanceof Error ? error.message : "Failed to load chat filters");
+    } finally {
+      setFilterLoading(false);
+    }
+  }
+
+  async function toggleGlobalFileFilter(fileId: number, isEnabled: boolean) {
+    const busyKey = `global-file:${fileId}`;
+    setFilterBusyKeys((current) => [...current, busyKey]);
+    setFilterError(null);
+    try {
+      const updated = await apiClient.updateUserFile(fileId, { is_enabled: isEnabled });
+      setGlobalFileFilters((current) => current.map((entry) => (entry.file_id === fileId ? updated : entry)));
+      setLibrary((current) =>
+        current
+          ? {
+              ...current,
+              files: current.files.map((entry) => (entry.id === fileId ? { ...entry, is_enabled: updated.is_enabled } : entry)),
+            }
+          : current,
+      );
+      setChatFileFiltersByChat((current) =>
+        Object.fromEntries(
+          Object.entries(current).map(([chatId, entries]) => [
+            chatId,
+            entries.map((entry) =>
+              entry.file_id === fileId
+                ? {
+                    ...entry,
+                    global_is_enabled: updated.global_is_enabled,
+                    is_enabled: updated.global_is_enabled && entry.scoped_is_enabled,
+                    is_locked: !updated.global_is_enabled,
+                  }
+                : entry,
+            ),
+          ]),
+        ),
+      );
+    } catch (error) {
+      setFilterError(error instanceof Error ? error.message : "Failed to update global file filter");
+    } finally {
+      setFilterBusyKeys((current) => current.filter((value) => value !== busyKey));
+    }
+  }
+
+  async function toggleChatFileFilter(chatId: string, fileId: number, isEnabled: boolean) {
+    const busyKey = `chat-file:${chatId}:${fileId}`;
+    setFilterBusyKeys((current) => [...current, busyKey]);
+    setFilterError(null);
+    try {
+      const updated = await apiClient.updateChatFile(chatId, fileId, { is_enabled: isEnabled });
+      setChatFileFiltersByChat((current) => ({
+        ...current,
+        [chatId]: (current[chatId] ?? []).map((entry) => (entry.file_id === fileId ? updated : entry)),
+      }));
+    } catch (error) {
+      setFilterError(error instanceof Error ? error.message : "Failed to update chat file filter");
+    } finally {
+      setFilterBusyKeys((current) => current.filter((value) => value !== busyKey));
+    }
+  }
+
+  async function toggleGlobalTagFilter(tag: string, isEnabled: boolean) {
+    const busyKey = `global-tag:${tag}`;
+    setFilterBusyKeys((current) => [...current, busyKey]);
+    setFilterError(null);
+    try {
+      const updated = await apiClient.updateUserTag(tag, { is_enabled: isEnabled });
+      setGlobalTagFilters((current) => current.map((entry) => (entry.tag === tag ? updated : entry)));
+      setChatTagFiltersByChat((current) =>
+        Object.fromEntries(
+          Object.entries(current).map(([chatId, entries]) => [
+            chatId,
+            entries.map((entry) =>
+              entry.tag === tag
+                ? {
+                    ...entry,
+                    global_is_enabled: updated.global_is_enabled,
+                    is_enabled: updated.global_is_enabled && entry.scoped_is_enabled,
+                    is_locked: !updated.global_is_enabled,
+                  }
+                : entry,
+            ),
+          ]),
+        ),
+      );
+    } catch (error) {
+      setFilterError(error instanceof Error ? error.message : "Failed to update global tag filter");
+    } finally {
+      setFilterBusyKeys((current) => current.filter((value) => value !== busyKey));
+    }
+  }
+
+  async function toggleChatTagFilter(chatId: string, tag: string, isEnabled: boolean) {
+    const busyKey = `chat-tag:${chatId}:${tag}`;
+    setFilterBusyKeys((current) => [...current, busyKey]);
+    setFilterError(null);
+    try {
+      const updated = await apiClient.updateChatTag(chatId, tag, { is_enabled: isEnabled });
+      setChatTagFiltersByChat((current) => ({
+        ...current,
+        [chatId]: (current[chatId] ?? []).map((entry) => (entry.tag === tag ? updated : entry)),
+      }));
+    } catch (error) {
+      setFilterError(error instanceof Error ? error.message : "Failed to update chat tag filter");
+    } finally {
+      setFilterBusyKeys((current) => current.filter((value) => value !== busyKey));
+    }
+  }
+
   const activeMessages = useMemo(() => (activeChatId ? messagesByChat[activeChatId] ?? [] : []), [activeChatId, messagesByChat]);
 
   return {
@@ -624,6 +791,13 @@ export function useChatApp() {
     settingsSaving,
     settingsError,
     settingsSuccess,
+    globalFileFilters,
+    globalTagFilters,
+    chatFileFiltersByChat,
+    chatTagFiltersByChat,
+    filterLoading,
+    filterError,
+    filterBusyKeys,
     setAssistantMode,
     ensureChatLoaded,
     createChat,
@@ -636,6 +810,12 @@ export function useChatApp() {
     loadSettings,
     updateSettingsDraft,
     saveSettings,
+    loadGlobalFilters,
+    loadChatFilters,
+    toggleGlobalFileFilter,
+    toggleChatFileFilter,
+    toggleGlobalTagFilter,
+    toggleChatTagFilter,
     loadLibrary,
     toggleLibraryFile,
     deleteLibraryFile,

@@ -18,6 +18,11 @@ from services.retriever.schemas.auth import (
 )
 from services.retriever.schemas.chat import (
     ChatDownloadResponse,
+    FilterFileListResponse,
+    FilterFileRead,
+    FilterTagListResponse,
+    FilterTagRead,
+    FilterUpdateRequest,
     ChatRead,
     ChatUpdateRequest,
     ErrorResponse,
@@ -243,6 +248,92 @@ def create_app() -> FastAPI:
         if chat is None:
             raise HTTPException(status_code=404, detail="Chat not found")
         return service.get_chat_messages(auth.user, chat_id)
+
+    @app.get("/api/user/files", response_model=FilterFileListResponse)
+    def list_user_files(
+        auth: AuthContext = Depends(get_app_auth_context),
+        service: RetrieverAppService = Depends(get_retriever_service),
+    ) -> FilterFileListResponse:
+        return FilterFileListResponse(**service.list_user_file_filters(auth.user))
+
+    @app.patch("/api/user/files/{file_id}", response_model=FilterFileRead, responses={404: {"model": ErrorResponse}})
+    def update_user_file(
+        file_id: int,
+        payload: FilterUpdateRequest,
+        auth: AuthContext = Depends(get_app_auth_context),
+        service: RetrieverAppService = Depends(get_retriever_service),
+    ) -> FilterFileRead:
+        record = service.update_user_file_filter(auth.user, file_id, is_enabled=payload.is_enabled)
+        if record is None:
+            raise HTTPException(status_code=404, detail="File not found")
+        return record
+
+    @app.get("/api/chats/{chat_id}/files", response_model=FilterFileListResponse, responses={404: {"model": ErrorResponse}})
+    def list_chat_files(
+        chat_id: str,
+        auth: AuthContext = Depends(get_app_auth_context),
+        service: RetrieverAppService = Depends(get_retriever_service),
+    ) -> FilterFileListResponse:
+        records = service.list_chat_file_filters(auth.user, chat_id)
+        if records is None:
+            raise HTTPException(status_code=404, detail="Chat not found")
+        return FilterFileListResponse(**records)
+
+    @app.patch("/api/chats/{chat_id}/files/{file_id}", response_model=FilterFileRead, responses={404: {"model": ErrorResponse}})
+    def update_chat_file(
+        chat_id: str,
+        file_id: int,
+        payload: FilterUpdateRequest,
+        auth: AuthContext = Depends(get_app_auth_context),
+        service: RetrieverAppService = Depends(get_retriever_service),
+    ) -> FilterFileRead:
+        record = service.update_chat_file_filter(auth.user, chat_id, file_id, is_enabled=payload.is_enabled)
+        if record is None:
+            raise HTTPException(status_code=404, detail="Chat or file not found")
+        return record
+
+    @app.get("/api/user/tags", response_model=FilterTagListResponse)
+    def list_user_tags(
+        auth: AuthContext = Depends(get_app_auth_context),
+        service: RetrieverAppService = Depends(get_retriever_service),
+    ) -> FilterTagListResponse:
+        return FilterTagListResponse(**service.list_user_tag_filters(auth.user))
+
+    @app.patch("/api/user/tags/{tag}", response_model=FilterTagRead, responses={404: {"model": ErrorResponse}})
+    def update_user_tag(
+        tag: str,
+        payload: FilterUpdateRequest,
+        auth: AuthContext = Depends(get_app_auth_context),
+        service: RetrieverAppService = Depends(get_retriever_service),
+    ) -> FilterTagRead:
+        record = service.update_user_tag_filter(auth.user, tag, is_enabled=payload.is_enabled)
+        if record is None:
+            raise HTTPException(status_code=404, detail="Tag not found")
+        return record
+
+    @app.get("/api/chats/{chat_id}/tags", response_model=FilterTagListResponse, responses={404: {"model": ErrorResponse}})
+    def list_chat_tags(
+        chat_id: str,
+        auth: AuthContext = Depends(get_app_auth_context),
+        service: RetrieverAppService = Depends(get_retriever_service),
+    ) -> FilterTagListResponse:
+        records = service.list_chat_tag_filters(auth.user, chat_id)
+        if records is None:
+            raise HTTPException(status_code=404, detail="Chat not found")
+        return FilterTagListResponse(**records)
+
+    @app.patch("/api/chats/{chat_id}/tags/{tag}", response_model=FilterTagRead, responses={404: {"model": ErrorResponse}})
+    def update_chat_tag(
+        chat_id: str,
+        tag: str,
+        payload: FilterUpdateRequest,
+        auth: AuthContext = Depends(get_app_auth_context),
+        service: RetrieverAppService = Depends(get_retriever_service),
+    ) -> FilterTagRead:
+        record = service.update_chat_tag_filter(auth.user, chat_id, tag, is_enabled=payload.is_enabled)
+        if record is None:
+            raise HTTPException(status_code=404, detail="Chat or tag not found")
+        return record
 
     @app.post(
         "/api/chats/{chat_id}/messages",

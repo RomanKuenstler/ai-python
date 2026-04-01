@@ -14,12 +14,13 @@ type SidebarProps = {
   onOpenArchive: () => void;
   onOpenInfo: () => void;
   onOpenHelp: () => void;
-  onOpenPreferences: (tab?: "general" | "personalization" | "settings" | "archive") => void;
+  onOpenPreferences: (tab?: "general" | "personalization" | "settings" | "filter" | "archive") => void;
   onOpenChangePassword: () => void;
   onLogout: () => void;
   onSelectChat: (chatId: string) => void;
   onRenameChat: (chatId: string, chatName: string) => void;
   onArchiveChat: (chatId: string) => void;
+  onOpenChatFilter: (chat: Chat) => void;
   onDownloadChat: (chatId: string) => void;
   onDeleteChat: (chatId: string) => void;
 };
@@ -41,6 +42,7 @@ export function Sidebar({
   onSelectChat,
   onRenameChat,
   onArchiveChat,
+  onOpenChatFilter,
   onDownloadChat,
   onDeleteChat,
 }: SidebarProps) {
@@ -140,7 +142,14 @@ export function Sidebar({
                     <Icon name="edit" />
                     Rename
                   </button>
-                  <button className="chat-item-actions-option" type="button" disabled>
+                  <button
+                    className="chat-item-actions-option"
+                    type="button"
+                    onClick={() => {
+                      onOpenChatFilter(chat);
+                      setMenuChatId(null);
+                    }}
+                  >
                     <Icon name="filter" />
                     Filter
                   </button>

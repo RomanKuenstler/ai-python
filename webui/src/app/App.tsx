@@ -3,6 +3,7 @@ import { BrowserRouter, Navigate, Route, Routes, useLocation, useNavigate, usePa
 import { AdminPage } from "../components/admin/AdminPage";
 import { ChatView } from "../components/chat/ChatView";
 import { Dialog } from "../components/common/Dialog";
+import { ChatFilterDialog } from "../components/filters/ChatFilterDialog";
 import { AppShell } from "../components/layout/AppShell";
 import { LibraryPage } from "../components/library/LibraryPage";
 import { PreferencesDialog } from "../components/preferences/PreferencesDialog";
@@ -22,6 +23,7 @@ function AppRoutes() {
   const [infoOpen, setInfoOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const [passwordDialogOpen, setPasswordDialogOpen] = useState(false);
+  const [chatFilterChatId, setChatFilterChatId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!app.isAuthenticated || app.requiresPasswordChange || app.bootstrapping || app.chats.length === 0) {
@@ -68,6 +70,9 @@ function AppRoutes() {
   async function openPreferences(tab: PreferencesTab = "general") {
     setPreferencesTab(tab);
     await app.loadSettings();
+    if (tab === "filter") {
+      await app.loadGlobalFilters();
+    }
   }
 
   async function handleCreateChat() {
@@ -120,6 +125,10 @@ function AppRoutes() {
       onSelectChat={(chatId) => void handleSelectChat(chatId)}
       onRenameChat={(chatId, chatName) => void handleRenameChat(chatId, chatName)}
       onArchiveChat={(chatId) => void handleArchiveChat(chatId)}
+      onOpenChatFilter={(chat) => {
+        setChatFilterChatId(chat.id);
+        void app.loadChatFilters(chat.id);
+      }}
       onDownloadChat={(chatId) => void app.downloadChat(chatId)}
       onDeleteChat={(chatId) => void handleDeleteChat(chatId)}
     />
@@ -196,8 +205,12 @@ function AppRoutes() {
           archivedChats={app.archivedChats}
           settingsDraft={app.settingsDraft}
           availableModes={app.settings?.available_assistant_modes ?? ["simple", "refine"]}
+          globalFilterTags={app.globalTagFilters}
           loading={app.settingsLoading}
           saving={app.settingsSaving}
+          filterLoading={app.filterLoading}
+          filterError={app.filterError}
+          filterBusyKeys={app.filterBusyKeys}
           error={app.settingsError}
           success={app.settingsSuccess}
           onClose={() => setPreferencesTab(null)}
@@ -206,6 +219,22 @@ function AppRoutes() {
           onDeleteChat={(chatId) => void handleDeleteChat(chatId)}
           onFieldChange={app.updateSettingsDraft}
           onSaveSettings={() => void app.saveSettings()}
+          onOpenFilterTab={() => void app.loadGlobalFilters()}
+          onToggleGlobalTag={(tag, isEnabled) => void app.toggleGlobalTagFilter(tag.tag, isEnabled)}
+        />
+      ) : null}
+
+      {chatFilterChatId ? (
+        <ChatFilterDialog
+          chatName={app.chats.find((chat) => chat.id === chatFilterChatId)?.chat_name ?? "Chat"}
+          files={app.chatFileFiltersByChat[chatFilterChatId] ?? []}
+          tags={app.chatTagFiltersByChat[chatFilterChatId] ?? []}
+          loading={app.filterLoading && !(app.chatFileFiltersByChat[chatFilterChatId] && app.chatTagFiltersByChat[chatFilterChatId])}
+          error={app.filterError}
+          busyKeys={app.filterBusyKeys}
+          onClose={() => setChatFilterChatId(null)}
+          onToggleTag={(tag, isEnabled) => void app.toggleChatTagFilter(chatFilterChatId, tag.tag, isEnabled)}
+          onToggleFile={(file, isEnabled) => void app.toggleChatFileFilter(chatFilterChatId, file.file_id, isEnabled)}
         />
       ) : null}
 

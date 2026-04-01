@@ -146,3 +146,32 @@ export type LibraryResponse = {
 export type LibraryUploadResponse = {
   files: LibraryFile[];
 };
+
+export type FilterFile = {
+  file_id: number;
+  file_name: string;
+  file_path: string;
+  tags: string[];
+  global_is_enabled: boolean;
+  scoped_is_enabled: boolean;
+  is_enabled: boolean;
+  is_locked: boolean;
+  updated_at: string;
+};
+
+export type FilterFileResponse = {
+  files: FilterFile[];
+};
+
+export type FilterTag = {
+  tag: string;
+  file_count: number;
+  global_is_enabled: boolean;
+  scoped_is_enabled: boolean;
+  is_enabled: boolean;
+  is_locked: boolean;
+};
+
+export type FilterTagResponse = {
+  tags: FilterTag[];
+};

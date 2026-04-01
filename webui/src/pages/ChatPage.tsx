@@ -52,6 +52,7 @@ export function ChatPage() {
           onSelectChat={(chatId) => void ensureChatLoaded(chatId)}
           onRenameChat={(chatId, chatName) => void renameChat(chatId, chatName)}
           onArchiveChat={(chatId) => void archiveChat(chatId)}
+          onOpenChatFilter={() => undefined}
           onDownloadChat={(chatId) => void downloadChat(chatId)}
           onDeleteChat={(chatId) => void deleteChat(chatId)}
         />

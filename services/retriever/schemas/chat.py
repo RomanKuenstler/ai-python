@@ -140,6 +140,39 @@ class LibraryUploadResponse(BaseModel):
     files: list[LibraryFileRead] = Field(default_factory=list)
 
 
+class FilterFileRead(BaseModel):
+    file_id: int
+    file_name: str
+    file_path: str
+    tags: list[str] = Field(default_factory=list)
+    global_is_enabled: bool
+    scoped_is_enabled: bool
+    is_enabled: bool
+    is_locked: bool = False
+    updated_at: datetime
+
+
+class FilterFileListResponse(BaseModel):
+    files: list[FilterFileRead] = Field(default_factory=list)
+
+
+class FilterTagRead(BaseModel):
+    tag: str
+    file_count: int
+    global_is_enabled: bool
+    scoped_is_enabled: bool
+    is_enabled: bool
+    is_locked: bool = False
+
+
+class FilterTagListResponse(BaseModel):
+    tags: list[FilterTagRead] = Field(default_factory=list)
+
+
+class FilterUpdateRequest(BaseModel):
+    is_enabled: bool
+
+
 class ErrorResponse(BaseModel):
     detail: str
 

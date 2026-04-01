@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+from services.common.postgres import FileFilterState, TagFilterState
 from services.common.models import ChatMessage, ChatSession, FileRecord, MessageAttachment, RetrievalLog
-from services.retriever.schemas.chat import AttachmentRead, ChatRead, LibraryFileRead, MessageRead, SourceRead
+from services.retriever.schemas.chat import AttachmentRead, ChatRead, FilterFileRead, FilterTagRead, LibraryFileRead, MessageRead, SourceRead
 
 
 def map_chat(chat: ChatSession) -> ChatRead:
@@ -80,4 +81,29 @@ def map_library_file(
         can_toggle_enabled=can_toggle_enabled,
         processing_status=record.processing_status,
         updated_at=record.updated_at,
+    )
+
+
+def map_filter_file(record: FileFilterState) -> FilterFileRead:
+    return FilterFileRead(
+        file_id=record.file_id,
+        file_name=record.file_name,
+        file_path=record.file_path,
+        tags=list(record.tags),
+        global_is_enabled=record.global_is_enabled,
+        scoped_is_enabled=record.scoped_is_enabled,
+        is_enabled=record.is_enabled,
+        is_locked=record.is_locked,
+        updated_at=record.updated_at,
+    )
+
+
+def map_filter_tag(record: TagFilterState) -> FilterTagRead:
+    return FilterTagRead(
+        tag=record.tag,
+        file_count=record.file_count,
+        global_is_enabled=record.global_is_enabled,
+        scoped_is_enabled=record.scoped_is_enabled,
+        is_enabled=record.is_enabled,
+        is_locked=record.is_locked,
     )

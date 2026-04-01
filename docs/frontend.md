@@ -24,6 +24,14 @@
 - `MessageBubble` keeps markdown, attachments, and sources working while using role-specific layout wrappers that mirror the reference message treatment.
 - `SourcesPanel` now renders as a compact evidence popover with summary text, stacked source rows, and restrained metadata styling.
 - `PreferencesDialog` and `LibraryPage` both rely on the shared section and table styling language introduced in Step 7.
+- `FilterTables` is the shared Step 9 filter surface for both global preferences and chat-specific filter dialogs.
+
+## Step 9 Filtering UI
+
+- The Library page still lists embedded files, but its enable toggle now mirrors the authenticated user's global file filter state.
+- `Preferences -> Filter` shows global tag and file tables with immediate toggle persistence.
+- Each chat menu exposes a `Filter` action that opens a dialog with chat-scoped tag and file controls.
+- Globally disabled tags and files are rendered as locked in chat scope so the precedence rules stay visible in the UI.
 
 ## Styling Approach
 

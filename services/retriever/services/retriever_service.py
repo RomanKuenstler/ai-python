@@ -23,7 +23,7 @@ from services.retriever.schemas.auth import AdminUserRead, AuthLoginResponse, Au
 from services.retriever.schemas.chat import ChatDownloadMessageRead, ChatDownloadResponse, SettingsRead, SettingsUpdateRequest
 from services.retriever.services.chat_naming import generate_chat_name
 from services.retriever.services.library_manager import LibraryManager, UploadFilePayload
-from services.retriever.services.message_mapper import map_attachment, map_chat, map_message, map_source
+from services.retriever.services.message_mapper import map_attachment, map_chat, map_filter_file, map_filter_tag, map_message, map_source
 
 RUNTIME_SETTING_KEYS = {
     "chat_history_messages_count",
@@ -202,6 +202,48 @@ class RetrieverAppService:
         files = self.library_manager.upload_files(user, uploads, tags_by_file)
         return {"files": files}
 
+    def list_user_file_filters(self, user: UserAccount):
+        return {"files": [map_filter_file(item) for item in self.chat_repository.list_user_file_filters(user.id)]}
+
+    def update_user_file_filter(self, user: UserAccount, file_id: int, *, is_enabled: bool):
+        record = self.chat_repository.set_user_file_filter(user.id, file_id, is_enabled)
+        if record is None:
+            return None
+        return map_filter_file(record)
+
+    def list_chat_file_filters(self, user: UserAccount, chat_id: str):
+        records = self.chat_repository.list_chat_file_filters(user.id, chat_id)
+        if records is None:
+            return None
+        return {"files": [map_filter_file(item) for item in records]}
+
+    def update_chat_file_filter(self, user: UserAccount, chat_id: str, file_id: int, *, is_enabled: bool):
+        record = self.chat_repository.set_chat_file_filter(user.id, chat_id, file_id, is_enabled)
+        if record is None:
+            return None
+        return map_filter_file(record)
+
+    def list_user_tag_filters(self, user: UserAccount):
+        return {"tags": [map_filter_tag(item) for item in self.chat_repository.list_user_tag_filters(user.id)]}
+
+    def update_user_tag_filter(self, user: UserAccount, tag: str, *, is_enabled: bool):
+        record = self.chat_repository.set_user_tag_filter(user.id, tag, is_enabled)
+        if record is None:
+            return None
+        return map_filter_tag(record)
+
+    def list_chat_tag_filters(self, user: UserAccount, chat_id: str):
+        records = self.chat_repository.list_chat_tag_filters(user.id, chat_id)
+        if records is None:
+            return None
+        return {"tags": [map_filter_tag(item) for item in records]}
+
+    def update_chat_tag_filter(self, user: UserAccount, chat_id: str, tag: str, *, is_enabled: bool):
+        record = self.chat_repository.set_chat_tag_filter(user.id, chat_id, tag, is_enabled)
+        if record is None:
+            return None
+        return map_filter_tag(record)
+
     def get_settings(self, user: UserAccount) -> SettingsRead:
         self._load_runtime_settings(user)
         return SettingsRead(
@@ -281,7 +323,12 @@ class RetrieverAppService:
         if processed_attachments:
             self.chat_repository.add_message_attachments(user_message.id, processed_attachments)
         history = self.history_service.fetch(chat_id, user_id=user.id, exclude_message_id=user_message.id)
-        retrieved_chunks = self.retrieval_service.retrieve(user_content, user_id=user.id, is_admin=user.role == "admin")
+        retrieved_chunks = self.retrieval_service.retrieve(
+            user_content,
+            user_id=user.id,
+            chat_id=chat_id,
+            is_admin=user.role == "admin",
+        )
         response = self._generate_response(
             assistant_mode=resolved_mode,
             user_content=user_content,
@@ -490,7 +537,7 @@ def build_retriever_app_service(
             score_threshold=retrieval_score_threshold,
             min_results=retrieval_min_results,
             max_results=retrieval_max_results,
-            enabled_file_paths_lookup=postgres_client.enabled_file_paths_for_candidates,
+            candidate_filter=postgres_client.filter_retrieval_candidates,
         ),
         prompt_builder=PromptBuilder(prompts_dir),
         llm_client=LlmClient(

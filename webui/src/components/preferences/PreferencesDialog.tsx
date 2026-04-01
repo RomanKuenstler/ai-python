@@ -1,15 +1,20 @@
 import { useMemo, useState } from "react";
-import type { AssistantMode, Chat, SettingsUpdate } from "../../types/chat";
+import type { AssistantMode, Chat, FilterTag, SettingsUpdate } from "../../types/chat";
 import { Icon } from "../common/Icons";
 import { Dialog } from "../common/Dialog";
+import { FilterTables } from "../filters/FilterTables";
 
 type PreferencesDialogProps = {
   initialTab?: "general" | "personalization" | "settings" | "filter" | "archive";
   archivedChats: Chat[];
   settingsDraft: SettingsUpdate | null;
   availableModes: AssistantMode[];
+  globalFilterTags: FilterTag[];
   loading: boolean;
   saving: boolean;
+  filterLoading: boolean;
+  filterError: string | null;
+  filterBusyKeys: string[];
   error: string | null;
   success: string | null;
   onClose: () => void;
@@ -18,6 +23,8 @@ type PreferencesDialogProps = {
   onDeleteChat: (chatId: string) => void;
   onFieldChange: (patch: Partial<SettingsUpdate>) => void;
   onSaveSettings: () => void;
+  onOpenFilterTab: () => void;
+  onToggleGlobalTag: (tag: FilterTag, isEnabled: boolean) => void;
 };
 
 const TABS = [
@@ -33,8 +40,12 @@ export function PreferencesDialog({
   archivedChats,
   settingsDraft,
   availableModes,
+  globalFilterTags,
   loading,
   saving,
+  filterLoading,
+  filterError,
+  filterBusyKeys,
   error,
   success,
   onClose,
@@ -43,6 +54,8 @@ export function PreferencesDialog({
   onDeleteChat,
   onFieldChange,
   onSaveSettings,
+  onOpenFilterTab,
+  onToggleGlobalTag,
 }: PreferencesDialogProps) {
   const [activeTab, setActiveTab] = useState<(typeof TABS)[number]["id"]>(initialTab);
   const settingsValidation = useMemo(() => {
@@ -78,7 +91,12 @@ export function PreferencesDialog({
               role="tab"
               className={`preferences-tab panel-tab-button${tab.id === activeTab ? " active" : ""}`}
               aria-selected={tab.id === activeTab}
-              onClick={() => setActiveTab(tab.id)}
+              onClick={() => {
+                setActiveTab(tab.id);
+                if (tab.id === "filter") {
+                  onOpenFilterTab();
+                }
+              }}
             >
               <span className="panel-tab-button-icon" aria-hidden="true">
                 <Icon name={tab.icon} />
@@ -246,11 +264,22 @@ export function PreferencesDialog({
 
           {activeTab === "filter" ? (
             <div className="preferences-section info-groups">
-              <section className="info-group-card">
-                <h4>Filter</h4>
-                <p className="preferences-copy">Filter controls are reserved for a future step.</p>
-                <div className="preferences-placeholder">Placeholder UI for global tag filtering and retrieval scope controls.</div>
-              </section>
+              {filterError ? <p className="inline-error">{filterError}</p> : null}
+              {filterLoading ? (
+                <section className="info-group-card">
+                  <div className="preferences-placeholder">Loading global filters...</div>
+                </section>
+              ) : (
+                <FilterTables
+                  mode="global"
+                  tags={globalFilterTags}
+                  files={[]}
+                  busyKeys={filterBusyKeys}
+                  showFiles={false}
+                  onToggleTag={onToggleGlobalTag}
+                  onToggleFile={() => undefined}
+                />
+              )}
             </div>
           ) : null}
 

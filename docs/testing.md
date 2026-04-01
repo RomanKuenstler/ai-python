@@ -27,6 +27,21 @@ npm run build
 - frontend production build
 - migration module importability
 
+## Step 9 Checks Covered
+
+- global file filters through both the library page API and the dedicated user filter API
+- chat-level file filters with global disable precedence
+- global tag filters
+- chat-level tag filters with locked global overrides
+- retrieval candidate filtering before score thresholding and result truncation
+
+Recommended focused run:
+
+```bash
+./.venv311/bin/pytest tests/test_step4_backend.py tests/test_step9_filters.py tests/test_retriever_api.py
+cd webui && npm run build
+```
+
 ## Visual Verification Process
 
 1. Start the stack with `docker compose up --build`.
@@ -50,6 +65,10 @@ npm run build
 
 - Create, open, rename, archive, download, and delete chats.
 - Open Library, upload files, toggle file state, and delete files.
+- Open `Preferences -> Filter` and confirm global file and tag toggles persist.
+- Open a chat menu filter dialog and confirm chat-specific toggles persist.
+- Disable a tag globally and confirm the same tag becomes locked in chat scope.
+- Disable a file globally and confirm chat scope shows it as unavailable.
 - Send messages with and without attachments.
 - Change assistant mode from the composer.
 - Open and close sources panels.

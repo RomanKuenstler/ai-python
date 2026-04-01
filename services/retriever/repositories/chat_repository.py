@@ -89,6 +89,30 @@ class ChatRepository:
     def upsert_setting(self, user_id: int, key: str, value: str) -> SettingRecord:
         return self.postgres_client.upsert_setting(user_id=user_id, key=key, value=value)
 
+    def list_user_file_filters(self, user_id: int):
+        return self.postgres_client.list_user_file_filters(user_id=user_id)
+
+    def set_user_file_filter(self, user_id: int, file_id: int, is_enabled: bool):
+        return self.postgres_client.set_user_file_filter(user_id=user_id, file_id=file_id, is_enabled=is_enabled)
+
+    def list_chat_file_filters(self, user_id: int, chat_id: str):
+        return self.postgres_client.list_chat_file_filters(user_id=user_id, chat_id=chat_id)
+
+    def set_chat_file_filter(self, user_id: int, chat_id: str, file_id: int, is_enabled: bool):
+        return self.postgres_client.set_chat_file_filter(user_id=user_id, chat_id=chat_id, file_id=file_id, is_enabled=is_enabled)
+
+    def list_user_tag_filters(self, user_id: int):
+        return self.postgres_client.list_user_tag_filters(user_id=user_id)
+
+    def set_user_tag_filter(self, user_id: int, tag: str, is_enabled: bool):
+        return self.postgres_client.set_user_tag_filter(user_id=user_id, tag=tag, is_enabled=is_enabled)
+
+    def list_chat_tag_filters(self, user_id: int, chat_id: str):
+        return self.postgres_client.list_chat_tag_filters(user_id=user_id, chat_id=chat_id)
+
+    def set_chat_tag_filter(self, user_id: int, chat_id: str, tag: str, is_enabled: bool):
+        return self.postgres_client.set_chat_tag_filter(user_id=user_id, chat_id=chat_id, tag=tag, is_enabled=is_enabled)
+
     def list_users(self) -> list[UserAccount]:
         return self.postgres_client.list_users()
 

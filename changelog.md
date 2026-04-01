@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-04-01 00:00 UTC
+
+- Implemented Step 9 user-scoped retrieval filtering with global and chat-level file plus tag settings.
+- Added new Alembic schema for `chat_file_settings`, `user_tag_settings`, and `chat_tag_settings`.
+- Reworked retrieval candidate filtering so file and tag precedence is enforced before score thresholding and response assembly.
+- Added authenticated filter endpoints for user and chat scope and expanded the frontend with global filter management plus chat-specific filter dialogs.
+- Added Step 9 tests for retrieval precedence, locking rules, and API coverage, and documented the filtering model across API, frontend, and testing docs.
+
 ## 2026-03-29 00:00 UTC
 
 - Added a full Step 1 local RAG scaffold with dedicated `embedder` and `retriever` services.

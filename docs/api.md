@@ -215,3 +215,47 @@ Responses may include:
 - `X-Auth-Max-Expires-At`
 
 When present, the frontend should replace the stored token with the refreshed one.
+
+## Step 9 Filtering
+
+- `GET /api/user/files`
+- `PATCH /api/user/files/{file_id}`
+- `GET /api/user/tags`
+- `PATCH /api/user/tags/{tag}`
+- `GET /api/chats/{chat_id}/files`
+- `PATCH /api/chats/{chat_id}/files/{file_id}`
+- `GET /api/chats/{chat_id}/tags`
+- `PATCH /api/chats/{chat_id}/tags/{tag}`
+
+All filter endpoints are authenticated and user-scoped.
+
+### Response Shape
+
+File filters return:
+
+- `file_id`
+- `file_name`
+- `file_path`
+- `tags`
+- `global_is_enabled`
+- `scoped_is_enabled`
+- `is_enabled`
+- `is_locked`
+- `updated_at`
+
+Tag filters return:
+
+- `tag`
+- `file_count`
+- `global_is_enabled`
+- `scoped_is_enabled`
+- `is_enabled`
+- `is_locked`
+
+`PATCH` requests accept:
+
+```json
+{
+  "is_enabled": false
+}
+```

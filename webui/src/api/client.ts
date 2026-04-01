@@ -6,6 +6,10 @@ import type {
   ChatDownload,
   ChatUpdate,
   CurrentUser,
+  FilterFile,
+  FilterFileResponse,
+  FilterTag,
+  FilterTagResponse,
   LibraryFile,
   LibraryResponse,
   LibraryUploadResponse,
@@ -218,6 +222,42 @@ export const apiClient = {
     return request<LibraryUploadResponse>("/api/library/files/upload", {
       method: "POST",
       body: formData,
+    });
+  },
+  listUserFiles() {
+    return request<FilterFileResponse>("/api/user/files");
+  },
+  updateUserFile(fileId: number, payload: { is_enabled: boolean }) {
+    return request<FilterFile>(`/api/user/files/${fileId}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    });
+  },
+  listChatFiles(chatId: string) {
+    return request<FilterFileResponse>(`/api/chats/${chatId}/files`);
+  },
+  updateChatFile(chatId: string, fileId: number, payload: { is_enabled: boolean }) {
+    return request<FilterFile>(`/api/chats/${chatId}/files/${fileId}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    });
+  },
+  listUserTags() {
+    return request<FilterTagResponse>("/api/user/tags");
+  },
+  updateUserTag(tag: string, payload: { is_enabled: boolean }) {
+    return request<FilterTag>(`/api/user/tags/${encodeURIComponent(tag)}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    });
+  },
+  listChatTags(chatId: string) {
+    return request<FilterTagResponse>(`/api/chats/${chatId}/tags`);
+  },
+  updateChatTag(chatId: string, tag: string, payload: { is_enabled: boolean }) {
+    return request<FilterTag>(`/api/chats/${chatId}/tags/${encodeURIComponent(tag)}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
     });
   },
 };
