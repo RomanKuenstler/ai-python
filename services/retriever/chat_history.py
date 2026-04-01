@@ -8,8 +8,21 @@ class ChatHistoryService:
         self.postgres_client = postgres_client
         self.history_limit = history_limit
 
-    def fetch(self, session_id: str, *, user_id: int, exclude_message_id: int | None = None) -> list[tuple[str, str]]:
-        history = self.postgres_client.get_recent_chat_history(session_id, user_id=user_id, limit=self.history_limit)
+    def fetch(
+        self,
+        session_id: str,
+        *,
+        user_id: int,
+        exclude_message_id: int | None = None,
+        gpt_id: str | None = None,
+        limit: int | None = None,
+    ) -> list[tuple[str, str]]:
+        history = self.postgres_client.get_recent_chat_history(
+            session_id,
+            user_id=user_id,
+            limit=limit or self.history_limit,
+            gpt_id=gpt_id,
+        )
         if exclude_message_id is not None:
             history = [message for message in history if message.id != exclude_message_id]
         return [(message.role, message.content) for message in history]

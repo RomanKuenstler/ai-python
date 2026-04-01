@@ -33,6 +33,16 @@
 - Each chat menu exposes a `Filter` action that opens a dialog with chat-scoped tag and file controls.
 - Globally disabled tags and files are rendered as locked in chat scope so the precedence rules stay visible in the UI.
 
+## Step 12 GPT UI
+
+- The sidebar now has a `GPTs` section above the normal chat list.
+- GPT rows open persistent GPT chats while normal chat rows still open normal chats.
+- GPT row menus expose `Edit`, `Clear`, `Download`, and `Delete`.
+- `+ New GPT` opens a full-width editor route without the main sidebar.
+- The GPT editor keeps configuration on the left and a non-persistent preview chat on the right.
+- Preview history is cleared locally whenever any GPT config field changes.
+- Persistent GPT chats lock the header assistant-mode picker because mode comes from the GPT itself.
+
 ## Styling Approach
 
 - Styling remains centralized in `webui/src/styles/index.css`.

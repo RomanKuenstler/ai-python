@@ -5,6 +5,48 @@
 - Retriever API: `http://localhost:8000`
 - Internal embedder attachment API: `http://embedder:8001`
 
+## GPTs
+
+### `GET /api/gpts`
+
+Returns all GPTs owned by the authenticated user.
+
+### `POST /api/gpts`
+
+Creates a GPT and eagerly provisions its persistent GPT chat.
+
+### `GET /api/gpts/{gpt_id}`
+
+Returns one GPT record or `404`.
+
+### `PATCH /api/gpts/{gpt_id}`
+
+Updates GPT metadata and GPT-only configuration.
+
+### `DELETE /api/gpts/{gpt_id}`
+
+Deletes the GPT plus its associated GPT chat history.
+
+### `POST /api/gpts/preview/messages`
+
+Runs a non-persistent preview turn with the submitted GPT draft and ephemeral preview history.
+
+### `GET /api/gpts/{gpt_id}/chat`
+
+Returns the GPT definition plus its persistent GPT chat history.
+
+### `POST /api/gpts/{gpt_id}/messages`
+
+Appends a message to the GPT-owned persistent chat and responds using only GPT configuration.
+
+### `DELETE /api/gpts/{gpt_id}/chat`
+
+Clears the persistent GPT chat while keeping the GPT definition intact.
+
+### `GET /api/gpts/{gpt_id}/download`
+
+Exports the GPT chat as JSON.
+
 ## Chats
 
 ### `POST /api/chats`

@@ -49,6 +49,7 @@ class PromptBuilder:
         history: list[tuple[str, str]],
         retrieved_chunks: list[dict[str, str | float | list[str]]],
         personalization: dict[str, Any] | None = None,
+        gpt_instructions: str = "",
         attachments: list[dict[str, object]] | None = None,
         attachment_char_limit: int = 15000,
     ) -> list[tuple[str, str]]:
@@ -58,6 +59,7 @@ class PromptBuilder:
             history=history,
             retrieved_chunks=retrieved_chunks,
             personalization=personalization,
+            gpt_instructions=gpt_instructions,
             attachments=attachments,
             attachment_char_limit=attachment_char_limit,
         )
@@ -69,6 +71,7 @@ class PromptBuilder:
         history: list[tuple[str, str]],
         retrieved_chunks: list[dict[str, str | float | list[str]]],
         personalization: dict[str, Any] | None = None,
+        gpt_instructions: str = "",
         attachments: list[dict[str, object]] | None = None,
         attachment_char_limit: int = 15000,
     ) -> list[tuple[str, str]]:
@@ -78,6 +81,7 @@ class PromptBuilder:
             history=history,
             retrieved_chunks=retrieved_chunks,
             personalization=personalization,
+            gpt_instructions=gpt_instructions,
             attachments=attachments,
             attachment_char_limit=attachment_char_limit,
         )
@@ -90,6 +94,7 @@ class PromptBuilder:
         retrieved_chunks: list[dict[str, str | float | list[str]]],
         draft_answer: str,
         personalization: dict[str, Any] | None = None,
+        gpt_instructions: str = "",
         attachments: list[dict[str, object]] | None = None,
         attachment_char_limit: int = 15000,
         ) -> list[tuple[str, str]]:
@@ -99,6 +104,7 @@ class PromptBuilder:
             history=history,
             retrieved_chunks=retrieved_chunks,
             personalization=personalization,
+            gpt_instructions=gpt_instructions,
             attachments=attachments,
             attachment_char_limit=attachment_char_limit,
             previous_step_outputs=[("draft answer", draft_answer)],
@@ -112,6 +118,7 @@ class PromptBuilder:
         history: list[tuple[str, str]],
         retrieved_chunks: list[dict[str, str | float | list[str]]],
         personalization: dict[str, Any] | None = None,
+        gpt_instructions: str = "",
         attachments: list[dict[str, object]] | None = None,
         attachment_char_limit: int = 15000,
     ) -> list[tuple[str, str]]:
@@ -121,6 +128,7 @@ class PromptBuilder:
             history=history,
             retrieved_chunks=retrieved_chunks,
             personalization=personalization,
+            gpt_instructions=gpt_instructions,
             attachments=attachments,
             attachment_char_limit=attachment_char_limit,
         )
@@ -133,6 +141,7 @@ class PromptBuilder:
         retrieved_chunks: list[dict[str, str | float | list[str]]],
         planning_result: str,
         personalization: dict[str, Any] | None = None,
+        gpt_instructions: str = "",
         attachments: list[dict[str, object]] | None = None,
         attachment_char_limit: int = 15000,
     ) -> list[tuple[str, str]]:
@@ -142,6 +151,7 @@ class PromptBuilder:
             history=history,
             retrieved_chunks=retrieved_chunks,
             personalization=personalization,
+            gpt_instructions=gpt_instructions,
             attachments=attachments,
             attachment_char_limit=attachment_char_limit,
             previous_step_outputs=[("planning result", planning_result)],
@@ -156,6 +166,7 @@ class PromptBuilder:
         planning_result: str,
         draft_answer: str,
         personalization: dict[str, Any] | None = None,
+        gpt_instructions: str = "",
         attachments: list[dict[str, object]] | None = None,
         attachment_char_limit: int = 15000,
     ) -> list[tuple[str, str]]:
@@ -165,6 +176,7 @@ class PromptBuilder:
             history=history,
             retrieved_chunks=retrieved_chunks,
             personalization=personalization,
+            gpt_instructions=gpt_instructions,
             attachments=attachments,
             attachment_char_limit=attachment_char_limit,
             previous_step_outputs=[("planning result", planning_result), ("draft answer", draft_answer)],
@@ -178,6 +190,7 @@ class PromptBuilder:
         history: list[tuple[str, str]],
         retrieved_chunks: list[dict[str, str | float | list[str]]],
         personalization: dict[str, Any] | None = None,
+        gpt_instructions: str = "",
         attachments: list[dict[str, object]] | None = None,
         attachment_char_limit: int = 15000,
         previous_step_outputs: list[tuple[str, str]] | None = None,
@@ -211,6 +224,8 @@ class PromptBuilder:
             ("system", assistant_prompt),
             ("system", self.build_personalization_block(personalization or {})),
         ]
+        if gpt_instructions.strip():
+            messages.append(("system", f"[gpt instructions]\n{gpt_instructions.strip()}"))
         for label, content in previous_step_outputs or []:
             messages.append(("system", f"[{label}]\n{content.strip()}"))
         messages.append(("system", rag_context))

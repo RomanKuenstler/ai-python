@@ -44,11 +44,26 @@ npm run build
 - shared RAG context, personalization, and chat history stay in the prompt flow
 - thinking-mode failures fall back gracefully to the simple pipeline
 
+## Step 12 Checks Covered
+
+- GPT CRUD API coverage
+- GPT chat fetch, clear, download, and message endpoints
+- GPT preview endpoint coverage
+- frontend production build with GPT routes, editor state, and sidebar integration
+- live docker smoke checks for migration startup, GPT CRUD, preview, and persistent GPT chat
+
 Recommended focused run:
 
 ```bash
 ./.venv311/bin/pytest tests/test_step6_assistant_modes.py tests/test_step10_personalization.py tests/test_retriever_api.py
 cd webui && npm run build
+```
+
+Step 12 runtime smoke check:
+
+```bash
+docker compose up --build -d
+curl http://localhost:8000/api/health
 ```
 
 ## Visual Verification Process

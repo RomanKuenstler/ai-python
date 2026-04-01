@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-04-01 18:45 UTC
+
+- Implemented Step 12 user-owned GPTs with isolated personalization, retrieval settings, file and tag overrides, instructions, and assistant mode.
+- Added Alembic-backed GPT persistence with `gpts`, `gpt_chats`, and GPT-owned chat message tracking.
+- Added GPT CRUD, preview, persistent GPT chat, clear, and download API endpoints.
+- Extended retrieval and prompt building so GPT chats ignore user defaults and inject GPT instructions into the prompt flow.
+- Added sidebar GPT navigation, full-width GPT editor and preview UX, persistent GPT chat routing, and locked GPT assistant-mode display in the web UI.
+- Expanded tests, docs, and docker validation for the Step 12 rollout.
+
 ## 2026-04-01 01:00 UTC
 
 - Implemented Step 11 `thinking` mode with a three-stage planning, drafting, and refining pipeline in the retriever service.

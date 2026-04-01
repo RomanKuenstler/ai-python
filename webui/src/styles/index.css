@@ -273,13 +273,17 @@ a {
 .brand {
   gap: 0.55rem;
   padding-left: 0.4rem;
+  justify-content: flex-start;
 }
 
-.brand h1 {
+.brand-title {
   margin: 0;
   font-size: 1.08rem;
-  font-weight: 620;
+  line-height: 1;
+  font-weight: 700;
   letter-spacing: 0.02em;
+  color: #111827;
+  white-space: nowrap;
 }
 
 .icon {
@@ -394,6 +398,54 @@ a {
   margin-top: 0.12rem;
 }
 
+.header-gpt-badge {
+  display: inline-flex;
+  align-items: center;
+  width: max-content;
+  gap: 0.7rem;
+  padding: 0.45rem 0.8rem 0.45rem 0.5rem;
+  border: 1px solid rgba(14, 116, 144, 0.14);
+  border-radius: 16px;
+  color: #0f172a;
+  background-color: #ffffff;
+  box-shadow: 0 10px 24px rgba(8, 47, 73, 0.08);
+}
+
+.header-gpt-badge-icon-shell {
+  width: 2rem;
+  height: 2rem;
+  border-radius: 12px;
+  color: #f8fafc;
+  display: inline-flex;
+  background-color: #0f172a;
+  align-items: center;
+  justify-content: center;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+
+.header-gpt-badge-icon {
+  width: 1rem;
+  height: 1rem;
+}
+
+.header-gpt-badge-copy {
+  display: grid;
+  gap: 0.05rem;
+}
+
+.header-gpt-badge-label {
+  color: rgb(107, 114, 128);
+  font-size: 0.69rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.header-gpt-badge-name {
+  font-size: 0.92rem;
+  font-weight: 800;
+  line-height: 1.1;
+}
+
 .header-action,
 .side-nav-item,
 .secondary-button,
@@ -436,14 +488,15 @@ a {
 .side-nav-inner {
   min-height: 0;
   height: 100%;
-  display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr) auto;
-  gap: 0.45rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
 }
 
 .side-nav-top {
   display: grid;
   gap: 0.28rem;
+  margin-bottom: 0.3rem;
 }
 
 .side-nav-item {
@@ -453,6 +506,15 @@ a {
   padding: 0.44rem 0.55rem;
   text-align: left;
   font-size: 0.92rem;
+}
+
+.side-nav-item-secondary {
+  margin-top: 0.18rem;
+}
+
+.side-nav-item-secondary .side-nav-item-icon {
+  background-color: #ffffff;
+  border-radius: 8px;
 }
 
 .side-nav-item-icon,
@@ -571,12 +633,20 @@ a {
 }
 
 .side-nav-headline {
-  margin: 0.4rem 0 0.2rem;
+  margin: 0.8rem 0 0.12rem;
   padding: 0 0.45rem;
   color: var(--text-muted);
   font-size: 0.82rem;
   letter-spacing: 0.04em;
   text-transform: uppercase;
+}
+
+.side-nav-sections {
+  display: grid;
+  align-content: start;
+  gap: 0;
+  min-height: 0;
+  flex: 1 1 auto;
 }
 
 .side-nav-chat-list {
@@ -586,6 +656,11 @@ a {
   gap: 0.2rem;
   overflow: auto;
   padding-right: 0.15rem;
+}
+
+.side-nav-gpt-list,
+.side-nav-chat-list-compact {
+  overflow: visible;
 }
 
 .side-nav-chat-row {
@@ -609,6 +684,35 @@ a {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.side-nav-gpt-item-content {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.side-nav-gpt-item-content > span:last-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.side-nav-gpt-icon-shell {
+  width: 1.3rem;
+  height: 1.3rem;
+  border-radius: 8px;
+  background-color: #ffffff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.side-nav-gpt-icon {
+  width: 0.82rem;
+  height: 0.82rem;
 }
 
 .side-nav-chat-item:hover {
@@ -797,6 +901,15 @@ a {
   padding-bottom: 0.4rem;
 }
 
+.chat-column-embedded {
+  width: 100%;
+  min-height: 0;
+  height: 100%;
+  gap: 0.9rem;
+  margin: 0;
+  padding: 0;
+}
+
 .library-column {
   width: min(calc(100% - 8rem), 1220px);
   gap: 0.85rem;
@@ -853,6 +966,12 @@ a {
 
 .chat-thread-card {
   min-height: calc(100vh - 10.7rem);
+}
+
+.chat-embedded-thread {
+  min-height: 0;
+  height: 100%;
+  padding: 0.1rem 0.1rem 0.4rem;
 }
 
 .message-list {
@@ -1321,6 +1440,16 @@ button.send {
   border-radius: 18px;
   background: rgba(255, 255, 255, 0.97);
   box-shadow: var(--shadow);
+}
+
+.composer-embedded {
+  position: sticky;
+  left: auto;
+  bottom: 0;
+  width: 100%;
+  transform: none;
+  margin-top: auto;
+  background: #ffffff;
 }
 
 .composer-input-shell {
@@ -2748,7 +2877,228 @@ button.send:hover:not(:disabled) {
   }
 }
 
+.gpt-editor-page {
+  height: 100vh;
+  padding: 1rem 1.25rem 1.25rem;
+  background: #fff;
+  overflow: hidden;
+}
+
+.gpt-editor-header {
+  display: grid;
+  grid-template-columns: 140px 1fr 140px;
+  align-items: center;
+  gap: 1rem;
+  margin: 0 auto 0.85rem;
+  max-width: 1600px;
+  position: sticky;
+  top: 0;
+  z-index: 15;
+  padding: 0.15rem 0 0.8rem;
+  background: rgba(255, 255, 255, 0.96);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--border-mute);
+}
+
+.gpt-editor-title {
+  margin: 0;
+  text-align: center;
+  font-size: 1.9rem;
+  font-weight: 650;
+}
+
+.gpt-editor-back {
+  justify-self: start;
+  border: none;
+  background: transparent;
+  color: var(--text-soft);
+  font-weight: 600;
+}
+
+.gpt-editor-save {
+  justify-self: end;
+  min-width: 5.75rem;
+}
+
+.gpt-editor-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(420px, 0.98fr);
+  gap: 0;
+  max-width: 1600px;
+  margin: 0 auto;
+  height: calc(100vh - 6.75rem);
+  min-height: 0;
+}
+
+.gpt-editor-panel {
+  min-width: 0;
+  min-height: 0;
+}
+
+.gpt-editor-config {
+  display: grid;
+  align-content: start;
+  gap: 1.2rem;
+  padding: 1.15rem 1.6rem 1.4rem 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.gpt-editor-preview-shell {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  height: 100%;
+  min-height: 0;
+  border-left: 1px solid var(--border-soft);
+  padding-left: 1.6rem;
+  overflow: hidden;
+}
+
+.gpt-editor-preview-header {
+  padding: 1.15rem 0 0.8rem;
+}
+
+.gpt-editor-preview-pane {
+  min-height: 0;
+  height: 100%;
+  display: grid;
+  overflow: hidden;
+}
+
+.gpt-editor-section {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.gpt-editor-section-title {
+  margin: 0;
+  color: #374151;
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.gpt-editor-field {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.gpt-editor-label {
+  color: #374151;
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.gpt-editor-sublabel {
+  color: var(--text-soft);
+  font-size: 0.79rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.gpt-editor-textarea {
+  min-height: 6.2rem;
+}
+
+.gpt-editor-textarea-lg {
+  min-height: 8rem;
+}
+
+.gpt-editor-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.65rem;
+}
+
+.gpt-editor-select {
+  position: relative;
+  width: 100%;
+}
+
+.gpt-editor-select-trigger {
+  width: 100%;
+  min-height: 2.8rem;
+  padding: 0.72rem 0.85rem;
+  font-weight: 400;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: #fff;
+  color: var(--text);
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  text-align: left;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+}
+
+.gpt-editor-select-trigger:hover {
+  background: #fbfdff;
+  border-color: #cbd5e1;
+}
+
+.gpt-editor-select-label {
+  font-size: 0.95rem;
+  font-weight: 400;
+  text-transform: none;
+}
+
+.gpt-editor-select-menu {
+  width: 100%;
+  min-width: 0;
+  left: 0;
+  right: auto;
+}
+
+.gpt-editor-select-option {
+  min-height: 0;
+}
+
+.gpt-editor-select-option-label {
+  font-size: 0.95rem;
+  font-weight: 500;
+  text-transform: none;
+}
+
 @media (max-width: 900px) {
+  .gpt-editor-page {
+    height: auto;
+    min-height: 100vh;
+    overflow: visible;
+    padding: 1rem;
+  }
+
+  .gpt-editor-layout,
+  .gpt-editor-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .gpt-editor-header {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .gpt-editor-preview-shell {
+    border-left: none;
+    border-top: 1px solid var(--border-soft);
+    padding-left: 0;
+    padding-top: 0.8rem;
+    height: auto;
+    overflow: visible;
+  }
+
+  .gpt-editor-layout,
+  .gpt-editor-config {
+    height: auto;
+  }
+
+  .gpt-editor-config {
+    overflow: visible;
+  }
+
   .page-shell {
     padding: 4.4rem 0.8rem 7rem;
   }

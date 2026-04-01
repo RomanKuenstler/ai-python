@@ -10,9 +10,10 @@ type ChatInputProps = {
   };
   onSend: (value: string, attachments: File[], mode: AssistantMode) => Promise<void>;
   assistantMode: AssistantMode;
+  variant?: "default" | "embedded";
 };
 
-export function ChatInput({ disabled, assistantMode, attachmentRules, onSend }: ChatInputProps) {
+export function ChatInput({ disabled, assistantMode, attachmentRules, onSend, variant = "default" }: ChatInputProps) {
   const [value, setValue] = useState("");
   const [attachments, setAttachments] = useState<File[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -76,7 +77,7 @@ export function ChatInput({ disabled, assistantMode, attachmentRules, onSend }: 
 
   return (
     <form
-      className="composer"
+      className={`composer${variant === "embedded" ? " composer-embedded" : ""}`}
       onSubmit={(event) => {
         event.preventDefault();
         void handleSubmit();
