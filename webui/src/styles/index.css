@@ -2392,7 +2392,7 @@ button.send:hover:not(:disabled) {
 
 .filter-file-head,
 .filter-file-row {
-  grid-template-columns: minmax(230px, 2fr) minmax(120px, 1.1fr) 0.7fr;
+  grid-template-columns: minmax(230px, 2fr) minmax(120px, 1.1fr) 0.75fr 0.7fr;
 }
 
 .filter-library-head > :nth-child(2),
@@ -2402,17 +2402,27 @@ button.send:hover:not(:disabled) {
   justify-self: center;
 }
 
+.filter-file-head > :nth-child(4),
+.filter-file-row > :nth-child(4) {
+  justify-self: center;
+}
+
 .filter-library-row.locked {
   opacity: 0.72;
 }
 
 .filter-name-cell,
 .filter-tags-cell,
+.filter-type-cell,
 .filter-toggle-cell {
   display: flex;
   flex-wrap: wrap;
   gap: 0.45rem;
   align-items: center;
+}
+
+.filter-type-cell {
+  justify-content: center;
 }
 
 .filter-name-cell {
@@ -2495,7 +2505,7 @@ button.send:hover:not(:disabled) {
   .filter-tag-row,
   .filter-file-head,
   .filter-file-row {
-    grid-template-columns: minmax(140px, 2fr) minmax(100px, 1fr) 0.7fr;
+    grid-template-columns: minmax(140px, 2fr) minmax(100px, 1fr) 0.75fr 0.7fr;
   }
 }
 

@@ -11,6 +11,31 @@ type FilterTablesProps = {
   onToggleFile: (file: FilterFile, isEnabled: boolean) => void;
 };
 
+function extensionTone(extension: string) {
+  const normalized = extension.toLowerCase();
+  if (normalized === ".pdf") {
+    return "is-red";
+  }
+  if (normalized === ".html" || normalized === ".htm") {
+    return "is-blue";
+  }
+  if (normalized === ".epub") {
+    return "is-purple";
+  }
+  if (normalized === ".md" || normalized === ".txt") {
+    return "is-gray";
+  }
+  return "is-green";
+}
+
+function fileExtension(fileName: string) {
+  const parts = fileName.split(".");
+  if (parts.length <= 1) {
+    return "file";
+  }
+  return `.${(parts[parts.length - 1] ?? "file").toLowerCase()}`;
+}
+
 function Toggle({
   checked,
   disabled,
@@ -95,6 +120,7 @@ export function FilterTables({
             <div className="library-table-head filter-library-head filter-file-head">
               <span>File Name</span>
               <span>Tags</span>
+              <span>Type</span>
               <span>Enabled</span>
             </div>
             <div className="library-table-body filter-library-body">
@@ -116,6 +142,11 @@ export function FilterTables({
                       ) : (
                         <span className="library-tag-line muted">No tags</span>
                       )}
+                    </div>
+                    <div className="filter-type-cell">
+                      <span className={`library-extension-chip ${extensionTone(fileExtension(file.file_name))}`}>
+                        {fileExtension(file.file_name)}
+                      </span>
                     </div>
                     <div className="filter-toggle-cell">
                       <Toggle
