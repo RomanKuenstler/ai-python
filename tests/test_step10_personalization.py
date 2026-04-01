@@ -52,7 +52,7 @@ class AttachmentClientStub:
 
 
 def build_service(repository: PersonalizationRepositoryStub) -> RetrieverAppService:
-    settings = Settings(data_dir=str(Path("data")), enable_refine_mode=True, default_assistant_mode="simple")
+    settings = Settings(data_dir=str(Path("data")), enable_refine_mode=True, enable_thinking_mode=True, default_assistant_mode="simple")
     return RetrieverAppService(
         RetrieverDependencies(
             chat_repository=repository,
@@ -142,3 +142,40 @@ def test_prompt_builder_inserts_personalization_before_rag_context() -> None:
     assert "The user prefers to be addressed as: Rik." in messages[2][1]
     assert messages[3][1] == "[draft answer]\nDraft response"
     assert "# Retrieved Evidence" in messages[4][1]
+
+
+def test_thinking_prompt_builder_inserts_previous_step_outputs_before_rag_context() -> None:
+    builder = PromptBuilder(Path("prompts"))
+
+    messages = builder.build_thinking_final_messages(
+        user_message="How does COPY work?",
+        history=[("assistant", "Previous answer")],
+        retrieved_chunks=[
+            {
+                "chunk_id": "chunk-1",
+                "file_name": "manual.md",
+                "file_path": "/app/data/manual.md",
+                "text": "COPY copies files into the image.",
+                "score": 0.91,
+                "tags": ["docker"],
+            }
+        ],
+        planning_result="Question\n- Explain COPY",
+        draft_answer="COPY copies files into the image.",
+        personalization={
+            "base_style": "professional",
+            "warm": "less",
+            "enthusiastic": "less",
+            "headers_and_lists": "more",
+            "custom_instructions": "Use concise examples.",
+            "nickname": "Rik",
+            "occupation": "Engineer",
+            "more_about_user": "Works with Docker daily.",
+        },
+    )
+
+    assert [message[0] for message in messages[:6]] == ["system", "system", "system", "system", "system", "system"]
+    assert messages[2][1].startswith("# Personalization")
+    assert messages[3][1] == "[planning result]\nQuestion\n- Explain COPY"
+    assert messages[4][1] == "[draft answer]\nCOPY copies files into the image."
+    assert "# Retrieved Evidence" in messages[5][1]

@@ -2,6 +2,16 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Icon } from "../common/Icons";
 import type { AssistantMode } from "../../types/chat";
 
+function getModeDescription(mode: AssistantMode) {
+  if (mode === "simple") {
+    return "For everyday simple tasks";
+  }
+  if (mode === "refine") {
+    return "For getting refined answers";
+  }
+  return "For multi-step planning, drafting, and refining";
+}
+
 type AppShellProps = {
   sidebar: ReactNode;
   content: ReactNode;
@@ -63,7 +73,7 @@ export function AppShell({ sidebar, content, assistantMode, availableModes, onAs
                   >
                     <span className="header-mode-option-copy">
                       <strong>{mode[0].toUpperCase() + mode.slice(1)}</strong>
-                      <small>{mode === "simple" ? "For everyday simple tasks" : "For getting refined answers"}</small>
+                      <small>{getModeDescription(mode)}</small>
                     </span>
                     {mode === assistantMode ? <Icon name="check" className="header-mode-option-check" /> : null}
                   </button>

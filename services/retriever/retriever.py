@@ -36,12 +36,15 @@ class RetrievalService:
         query_vector = self.embedding_client.embed_query(query)
         candidates = self.qdrant_store.search(query_vector=query_vector, limit=self.max_results * 3)
         if self.candidate_filter is not None:
-            candidates = self.candidate_filter(
-                candidates,
-                user_id=user_id,
-                chat_id=chat_id,
-                is_admin=is_admin,
-            )
+            try:
+                candidates = self.candidate_filter(
+                    candidates,
+                    user_id=user_id,
+                    chat_id=chat_id,
+                    is_admin=is_admin,
+                )
+            except TypeError:
+                candidates = self.candidate_filter(candidates, user_id, chat_id, is_admin)
         accepted = [candidate for candidate in candidates if float(candidate["score"]) >= self.score_threshold]
         accepted.sort(key=lambda candidate: float(candidate["score"]), reverse=True)
         if len(accepted) < self.min_results:

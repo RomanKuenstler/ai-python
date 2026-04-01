@@ -70,6 +70,16 @@ function clearAppSessionState() {
   window.localStorage.removeItem(ACTIVE_CHAT_STORAGE_KEY);
 }
 
+function getPendingAssistantText(mode: AssistantMode) {
+  if (mode === "refine") {
+    return "Refining answer...";
+  }
+  if (mode === "thinking") {
+    return "Planning, drafting, and refining...";
+  }
+  return "Thinking...";
+}
+
 export function useChatApp() {
   const [authReady, setAuthReady] = useState(false);
   const [authLoading, setAuthLoading] = useState(true);
@@ -407,7 +417,7 @@ export function useChatApp() {
       quality: {},
     }));
     const optimisticUser = createOptimisticMessage(chatId, "user", content, "completed", optimisticAttachments);
-    const optimisticAssistant = createOptimisticMessage(chatId, "assistant", mode === "refine" ? "Refining answer..." : "Thinking...", "pending");
+    const optimisticAssistant = createOptimisticMessage(chatId, "assistant", getPendingAssistantText(mode), "pending");
 
     setSending(true);
     setAppError(null);

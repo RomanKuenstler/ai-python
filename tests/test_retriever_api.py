@@ -256,7 +256,7 @@ class StubRetrieverService:
             min_similarities=2,
             similarity_score_threshold=0.7,
             default_assistant_mode="simple",
-            available_assistant_modes=["simple", "refine"],
+            available_assistant_modes=["simple", "refine", "thinking"],
         )
 
     def get_personalization(self, *_args, **_kwargs) -> PersonalizationRead:
@@ -287,7 +287,7 @@ class StubRetrieverService:
             min_similarities=payload.min_similarities,
             similarity_score_threshold=payload.similarity_score_threshold,
             default_assistant_mode="simple",
-            available_assistant_modes=["simple", "refine"],
+            available_assistant_modes=["simple", "refine", "thinking"],
         )
 
     def list_library_files(self, *_args, **_kwargs) -> LibraryListResponse:
@@ -490,11 +490,11 @@ def test_chat_endpoints() -> None:
 
 def test_post_message_returns_sources() -> None:
     client = build_client()
-    response = client.post("/api/chats/chat-1/messages", json={"message": "hello", "assistant_mode": "refine"})
+    response = client.post("/api/chats/chat-1/messages", json={"message": "hello", "assistant_mode": "thinking"})
     assert response.status_code == 200
     payload = response.json()
     assert payload["assistant_message"]["content"] == "Grounded answer"
-    assert payload["assistant_mode"] == "refine"
+    assert payload["assistant_mode"] == "thinking"
     assert payload["sources"][0]["file_name"] == "manual.pdf"
     assert payload["sources"][0]["section"] == "Volumes"
 
@@ -545,6 +545,7 @@ def test_download_and_settings_endpoints() -> None:
     settings_response = client.get("/api/settings")
     assert settings_response.status_code == 200
     assert settings_response.json()["max_similarities"] == 8
+    assert settings_response.json()["available_assistant_modes"] == ["simple", "refine", "thinking"]
 
     patch_response = client.patch(
         "/api/settings",

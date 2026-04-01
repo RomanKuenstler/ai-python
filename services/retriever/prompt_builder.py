@@ -11,6 +11,9 @@ class PromptBuilder:
         self.assistant = (prompts_dir / "assistant.md").read_text(encoding="utf-8").strip()
         self.assistant_refine_draft = (prompts_dir / "assistant-refine-draft.md").read_text(encoding="utf-8").strip()
         self.assistant_refine_refining = (prompts_dir / "assistant-refine-refining.md").read_text(encoding="utf-8").strip()
+        self.assistant_thinking_plan = (prompts_dir / "assistant-thinking-analyse-plan.md").read_text(encoding="utf-8").strip()
+        self.assistant_thinking_draft = (prompts_dir / "assistant-thinking-draft.md").read_text(encoding="utf-8").strip()
+        self.assistant_thinking_refining = (prompts_dir / "assistant-thinking-refining.md").read_text(encoding="utf-8").strip()
         self.rag_template = (prompts_dir / "ragcontext.md").read_text(encoding="utf-8").strip()
         self.personalization_template = (prompts_dir / "personalization-template.md").read_text(encoding="utf-8").strip()
         self.personalization_custom_instructions_template = (
@@ -89,7 +92,7 @@ class PromptBuilder:
         personalization: dict[str, Any] | None = None,
         attachments: list[dict[str, object]] | None = None,
         attachment_char_limit: int = 15000,
-    ) -> list[tuple[str, str]]:
+        ) -> list[tuple[str, str]]:
         messages = self._build_messages(
             assistant_prompt=self.assistant_refine_refining,
             user_message=user_message,
@@ -98,9 +101,74 @@ class PromptBuilder:
             personalization=personalization,
             attachments=attachments,
             attachment_char_limit=attachment_char_limit,
+            previous_step_outputs=[("draft answer", draft_answer)],
         )
-        messages.insert(3, ("system", f"[draft answer]\n{draft_answer.strip()}"))
         return messages
+
+    def build_thinking_plan_messages(
+        self,
+        *,
+        user_message: str,
+        history: list[tuple[str, str]],
+        retrieved_chunks: list[dict[str, str | float | list[str]]],
+        personalization: dict[str, Any] | None = None,
+        attachments: list[dict[str, object]] | None = None,
+        attachment_char_limit: int = 15000,
+    ) -> list[tuple[str, str]]:
+        return self._build_messages(
+            assistant_prompt=self.assistant_thinking_plan,
+            user_message=user_message,
+            history=history,
+            retrieved_chunks=retrieved_chunks,
+            personalization=personalization,
+            attachments=attachments,
+            attachment_char_limit=attachment_char_limit,
+        )
+
+    def build_thinking_draft_messages(
+        self,
+        *,
+        user_message: str,
+        history: list[tuple[str, str]],
+        retrieved_chunks: list[dict[str, str | float | list[str]]],
+        planning_result: str,
+        personalization: dict[str, Any] | None = None,
+        attachments: list[dict[str, object]] | None = None,
+        attachment_char_limit: int = 15000,
+    ) -> list[tuple[str, str]]:
+        return self._build_messages(
+            assistant_prompt=self.assistant_thinking_draft,
+            user_message=user_message,
+            history=history,
+            retrieved_chunks=retrieved_chunks,
+            personalization=personalization,
+            attachments=attachments,
+            attachment_char_limit=attachment_char_limit,
+            previous_step_outputs=[("planning result", planning_result)],
+        )
+
+    def build_thinking_final_messages(
+        self,
+        *,
+        user_message: str,
+        history: list[tuple[str, str]],
+        retrieved_chunks: list[dict[str, str | float | list[str]]],
+        planning_result: str,
+        draft_answer: str,
+        personalization: dict[str, Any] | None = None,
+        attachments: list[dict[str, object]] | None = None,
+        attachment_char_limit: int = 15000,
+    ) -> list[tuple[str, str]]:
+        return self._build_messages(
+            assistant_prompt=self.assistant_thinking_refining,
+            user_message=user_message,
+            history=history,
+            retrieved_chunks=retrieved_chunks,
+            personalization=personalization,
+            attachments=attachments,
+            attachment_char_limit=attachment_char_limit,
+            previous_step_outputs=[("planning result", planning_result), ("draft answer", draft_answer)],
+        )
 
     def _build_messages(
         self,
@@ -112,6 +180,7 @@ class PromptBuilder:
         personalization: dict[str, Any] | None = None,
         attachments: list[dict[str, object]] | None = None,
         attachment_char_limit: int = 15000,
+        previous_step_outputs: list[tuple[str, str]] | None = None,
     ) -> list[tuple[str, str]]:
         evidence_quality = "weak"
         if len(retrieved_chunks) >= 4:
@@ -141,8 +210,10 @@ class PromptBuilder:
             ("system", self.guardrails),
             ("system", assistant_prompt),
             ("system", self.build_personalization_block(personalization or {})),
-            ("system", rag_context),
         ]
+        for label, content in previous_step_outputs or []:
+            messages.append(("system", f"[{label}]\n{content.strip()}"))
+        messages.append(("system", rag_context))
         messages.append(("system", self._build_attachment_context(attachments or [], attachment_char_limit)))
         if history:
             history_text = "\n".join(f"{role.upper()}: {content}" for role, content in history)

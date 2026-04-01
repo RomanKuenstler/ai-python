@@ -60,14 +60,14 @@ JSON request:
 ```json
 {
   "message": "What does the Docker book say about volumes?",
-  "assistant_mode": "simple"
+  "assistant_mode": "thinking"
 }
 ```
 
 Multipart request:
 
 - `message`: text field
-- `assistant_mode`: `simple` or `refine`
+- `assistant_mode`: `simple`, `refine`, or `thinking`
 - `files`: up to 3 file parts
 
 Response:
@@ -106,7 +106,7 @@ Response:
     "sources": [],
     "attachments": []
   },
-  "assistant_mode": "simple",
+  "assistant_mode": "thinking",
   "sources": [],
   "attachments_used": [
     {
@@ -125,7 +125,7 @@ Response:
 
 ### `GET /api/settings`
 
-Returns live retriever settings and available assistant modes.
+Returns live retriever settings and available assistant modes. Step 11 mode lists may include `simple`, `refine`, and `thinking`.
 
 ### `PATCH /api/settings`
 

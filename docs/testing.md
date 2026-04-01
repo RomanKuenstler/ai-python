@@ -35,10 +35,19 @@ npm run build
 - chat-level tag filters with locked global overrides
 - retrieval candidate filtering before score thresholding and result truncation
 
+## Step 11 Checks Covered
+
+- `thinking` mode executes planning, drafting, and refining in sequence
+- `planning_result` is passed into drafting and refining
+- `draft_result` is passed into refining
+- only the final answer is persisted and returned to the API caller
+- shared RAG context, personalization, and chat history stay in the prompt flow
+- thinking-mode failures fall back gracefully to the simple pipeline
+
 Recommended focused run:
 
 ```bash
-./.venv311/bin/pytest tests/test_step4_backend.py tests/test_step9_filters.py tests/test_retriever_api.py
+./.venv311/bin/pytest tests/test_step6_assistant_modes.py tests/test_step10_personalization.py tests/test_retriever_api.py
 cd webui && npm run build
 ```
 
@@ -71,6 +80,7 @@ cd webui && npm run build
 - Disable a file globally and confirm chat scope shows it as unavailable.
 - Send messages with and without attachments.
 - Change assistant mode from the composer.
+- Send at least one message with `thinking` mode and confirm only the final answer appears in the chat UI.
 - Open and close sources panels.
 - Open Info, Help, Preferences, and Archive-related dialogs.
 - Confirm archived chat actions still work.
@@ -86,4 +96,5 @@ cd webui && npm run build
 - If startup fails before the API boots, confirm `alembic` is installed in the active environment.
 - If image attachments fail, verify Tesseract is available in the embedder container.
 - If attachment context seems missing, inspect the retriever logs and confirm `ATTACHMENT_MAX_TOTAL_CHARS` is not overly restrictive.
+- If thinking mode fails, inspect retriever logs for the planning or draft debug entries and confirm the fallback simple response path was used.
 - If the Step 7 visuals look inconsistent, inspect the fixed composer width, sidebar padding, and modal variants first because they establish most of the reference rhythm.

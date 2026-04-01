@@ -139,7 +139,7 @@ function AppRoutes() {
       <AppShell
         sidebar={sidebar}
         assistantMode={app.assistantMode}
-        availableModes={app.settings?.available_assistant_modes ?? ["simple", "refine"]}
+        availableModes={app.settings?.available_assistant_modes ?? ["simple", "refine", "thinking"]}
         onAssistantModeChange={app.setAssistantMode}
         content={
           <Routes>
@@ -205,7 +205,7 @@ function AppRoutes() {
           archivedChats={app.archivedChats}
           settingsDraft={app.settingsDraft}
           personalizationDraft={app.personalizationDraft}
-          availableModes={app.settings?.available_assistant_modes ?? ["simple", "refine"]}
+          availableModes={app.settings?.available_assistant_modes ?? ["simple", "refine", "thinking"]}
           globalFilterTags={app.globalTagFilters}
           loading={app.settingsLoading}
           saving={app.settingsSaving}

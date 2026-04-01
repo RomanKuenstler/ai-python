@@ -45,7 +45,7 @@ from services.retriever.services.retriever_service import RetrieverAppService
 
 def create_app() -> FastAPI:
     settings = get_settings()
-    app = FastAPI(title="Local RAG Retriever API", version="10.0.0")
+    app = FastAPI(title="Local RAG Retriever API", version="11.0.0")
 
     origins = [origin.strip() for origin in settings.cors_allowed_origins.split(",") if origin.strip()]
     app.add_middleware(

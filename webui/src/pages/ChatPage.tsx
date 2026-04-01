@@ -32,7 +32,7 @@ export function ChatPage() {
   return (
     <AppShell
       assistantMode={assistantMode}
-      availableModes={settings?.available_assistant_modes ?? ["simple", "refine"]}
+      availableModes={settings?.available_assistant_modes ?? ["simple", "refine", "thinking"]}
       onAssistantModeChange={setAssistantMode}
       sidebar={
         <Sidebar

@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-04-01 01:00 UTC
+
+- Implemented Step 11 `thinking` mode with a three-stage planning, drafting, and refining pipeline in the retriever service.
+- Added dedicated thinking prompt templates plus reusable prompt-builder support for passing prior-step outputs between stages.
+- Extended assistant-mode settings and frontend mode selectors so `thinking` is available anywhere `simple` and `refine` are shown.
+- Added graceful fallback from thinking mode to the simple pipeline when a thinking stage fails.
+- Expanded tests and documentation for prompt composition, API exposure, assistant modes, and Step 11 validation guidance.
+
 ## 2026-04-01 00:00 UTC
 
 - Implemented Step 9 user-scoped retrieval filtering with global and chat-level file plus tag settings.

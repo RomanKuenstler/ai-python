@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -51,6 +52,7 @@ PERSONALIZATION_DEFAULTS = {
 }
 
 PERSONALIZATION_SETTING_KEYS = set(PERSONALIZATION_DEFAULTS)
+logger = logging.getLogger(__name__)
 
 
 @dataclass(slots=True)
@@ -490,7 +492,124 @@ class RetrieverAppService:
             return self.llm_client.invoke(
                 self.prompt_builder.build_refine_final_messages(draft_answer=draft, **common_kwargs)
             )
+        if assistant_mode == "thinking":
+            try:
+                return self._run_thinking_pipeline(**common_kwargs)
+            except Exception:
+                logger.exception("Thinking mode failed; falling back to simple mode")
+                return self.llm_client.invoke(self.prompt_builder.build_simple_messages(**common_kwargs))
         return self.llm_client.invoke(self.prompt_builder.build_simple_messages(**common_kwargs))
+
+    def _run_thinking_pipeline(
+        self,
+        *,
+        user_message: str,
+        history: list[tuple[str, str]],
+        retrieved_chunks: list[dict[str, str | float | list[str] | None]],
+        personalization: dict[str, str],
+        attachments: list[dict[str, object]],
+        attachment_char_limit: int,
+    ) -> str:
+        planning_result = self._run_thinking_planning(
+            user_message=user_message,
+            history=history,
+            retrieved_chunks=retrieved_chunks,
+            personalization=personalization,
+            attachments=attachments,
+            attachment_char_limit=attachment_char_limit,
+        )
+        draft_result = self._run_thinking_drafting(
+            user_message=user_message,
+            history=history,
+            retrieved_chunks=retrieved_chunks,
+            personalization=personalization,
+            planning_result=planning_result,
+            attachments=attachments,
+            attachment_char_limit=attachment_char_limit,
+        )
+        return self._run_thinking_refining(
+            user_message=user_message,
+            history=history,
+            retrieved_chunks=retrieved_chunks,
+            personalization=personalization,
+            planning_result=planning_result,
+            draft_result=draft_result,
+            attachments=attachments,
+            attachment_char_limit=attachment_char_limit,
+        )
+
+    def _run_thinking_planning(
+        self,
+        *,
+        user_message: str,
+        history: list[tuple[str, str]],
+        retrieved_chunks: list[dict[str, str | float | list[str] | None]],
+        personalization: dict[str, str],
+        attachments: list[dict[str, object]],
+        attachment_char_limit: int,
+    ) -> str:
+        planning_result = self.llm_client.invoke(
+            self.prompt_builder.build_thinking_plan_messages(
+                user_message=user_message,
+                history=history,
+                retrieved_chunks=retrieved_chunks,
+                personalization=personalization,
+                attachments=attachments,
+                attachment_char_limit=attachment_char_limit,
+            )
+        )
+        logger.debug("Thinking mode planning result: %s", planning_result)
+        return planning_result
+
+    def _run_thinking_drafting(
+        self,
+        *,
+        user_message: str,
+        history: list[tuple[str, str]],
+        retrieved_chunks: list[dict[str, str | float | list[str] | None]],
+        personalization: dict[str, str],
+        planning_result: str,
+        attachments: list[dict[str, object]],
+        attachment_char_limit: int,
+    ) -> str:
+        draft_result = self.llm_client.invoke(
+            self.prompt_builder.build_thinking_draft_messages(
+                user_message=user_message,
+                history=history,
+                retrieved_chunks=retrieved_chunks,
+                planning_result=planning_result,
+                personalization=personalization,
+                attachments=attachments,
+                attachment_char_limit=attachment_char_limit,
+            )
+        )
+        logger.debug("Thinking mode draft result: %s", draft_result)
+        return draft_result
+
+    def _run_thinking_refining(
+        self,
+        *,
+        user_message: str,
+        history: list[tuple[str, str]],
+        retrieved_chunks: list[dict[str, str | float | list[str] | None]],
+        personalization: dict[str, str],
+        planning_result: str,
+        draft_result: str,
+        attachments: list[dict[str, object]],
+        attachment_char_limit: int,
+    ) -> str:
+        return self.llm_client.invoke(
+            self.prompt_builder.build_thinking_final_messages(
+                user_message=user_message,
+                history=history,
+                retrieved_chunks=retrieved_chunks,
+                planning_result=planning_result,
+                draft_answer=draft_result,
+                personalization=personalization,
+                attachments=attachments,
+                attachment_char_limit=attachment_char_limit,
+            )
+        )
 
     def _resolve_assistant_mode(self, assistant_mode: str | None) -> str:
         mode = (assistant_mode or self.settings.default_assistant_mode).strip().lower()

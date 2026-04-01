@@ -74,7 +74,7 @@ export type MessageResponse = {
   attachments_used: AttachmentMeta[];
 };
 
-export type AssistantMode = "simple" | "refine";
+export type AssistantMode = "simple" | "refine" | "thinking";
 
 export type Settings = {
   chat_history_messages_count: number;

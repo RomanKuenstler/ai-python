@@ -125,6 +125,18 @@ class StubPromptBuilder:
         self.calls.append(("refine-final", kwargs))
         return [("system", "final"), ("user", kwargs["user_message"])]
 
+    def build_thinking_plan_messages(self, **kwargs):
+        self.calls.append(("thinking-plan", kwargs))
+        return [("system", "thinking-plan"), ("user", kwargs["user_message"])]
+
+    def build_thinking_draft_messages(self, **kwargs):
+        self.calls.append(("thinking-draft", kwargs))
+        return [("system", "thinking-draft"), ("user", kwargs["user_message"])]
+
+    def build_thinking_final_messages(self, **kwargs):
+        self.calls.append(("thinking-final", kwargs))
+        return [("system", "thinking-final"), ("user", kwargs["user_message"])]
+
 
 class StubLlmClient:
     def __init__(self) -> None:
@@ -134,6 +146,10 @@ class StubLlmClient:
         self.calls.append(messages)
         if messages[0][1] == "draft":
             return "Draft answer"
+        if messages[0][1] == "thinking-plan":
+            return "Plan answer"
+        if messages[0][1] == "thinking-draft":
+            return "Draft from plan"
         return "Final answer"
 
 
@@ -151,7 +167,7 @@ def build_service() -> tuple[RetrieverAppService, StubRepository, StubPromptBuil
     repository = StubRepository()
     prompt_builder = StubPromptBuilder()
     llm_client = StubLlmClient()
-    settings = Settings(data_dir=str(Path("data")), enable_refine_mode=True, default_assistant_mode="simple")
+    settings = Settings(data_dir=str(Path("data")), enable_refine_mode=True, enable_thinking_mode=True, default_assistant_mode="simple")
     service = RetrieverAppService(
         RetrieverDependencies(
             chat_repository=repository,
@@ -192,3 +208,37 @@ def test_refine_mode_uses_draft_and_final_passes_but_only_persists_final_message
     assert repository.messages[-1].role == "assistant"
     assert repository.messages[-1].content == "Final answer"
     assert all(message.content != "Draft answer" for message in repository.messages)
+
+
+def test_thinking_mode_uses_three_generation_passes_and_only_persists_final_message() -> None:
+    service, repository, prompt_builder, llm_client = build_service()
+
+    response = service.send_message("chat-1", "Explain COPY", assistant_mode="thinking")
+
+    assert response["assistant_mode"] == "thinking"
+    assert response["assistant_message"].content == "Final answer"
+    assert [call[0] for call in prompt_builder.calls] == ["thinking-plan", "thinking-draft", "thinking-final"]
+    assert prompt_builder.calls[1][1]["planning_result"] == "Plan answer"
+    assert prompt_builder.calls[2][1]["planning_result"] == "Plan answer"
+    assert prompt_builder.calls[2][1]["draft_answer"] == "Draft from plan"
+    assert len(llm_client.calls) == 3
+    assert repository.messages[-1].role == "assistant"
+    assert repository.messages[-1].content == "Final answer"
+    assert all(message.content not in {"Plan answer", "Draft from plan"} for message in repository.messages)
+
+
+def test_thinking_mode_falls_back_to_simple_when_pipeline_step_fails() -> None:
+    service, _repository, prompt_builder, llm_client = build_service()
+
+    def failing_build_thinking_draft_messages(**kwargs):
+        prompt_builder.calls.append(("thinking-draft", kwargs))
+        raise RuntimeError("draft step failed")
+
+    prompt_builder.build_thinking_draft_messages = failing_build_thinking_draft_messages  # type: ignore[method-assign]
+
+    response = service.send_message("chat-1", "Explain COPY", assistant_mode="thinking")
+
+    assert response["assistant_mode"] == "thinking"
+    assert response["assistant_message"].content == "Final answer"
+    assert [call[0] for call in prompt_builder.calls] == ["thinking-plan", "thinking-draft", "simple"]
+    assert len(llm_client.calls) == 2

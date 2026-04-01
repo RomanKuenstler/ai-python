@@ -32,7 +32,7 @@ class Settings:
     embedding_base_url: str = os.getenv("EMBEDDING_BASE_URL", "http://host.docker.internal:11434/v1")
     embedding_api_key: str = os.getenv("EMBEDDING_API_KEY", "dummy")
     embedding_max_input_tokens: int = _get_int("EMBEDDING_MAX_INPUT_TOKENS", 400)
-    llm_model: str = os.getenv("LLM_MODEL", "qwen3.5-4b")
+    llm_model: str = os.getenv("LLM_MODEL", "huggingface.co/qwen/qwen2.5-coder-3b-instruct-gguf:Q4_K_M")
     llm_base_url: str = os.getenv("LLM_BASE_URL", "http://host.docker.internal:11434/v1")
     llm_api_key: str = os.getenv("LLM_API_KEY", "dummy")
     llm_timeout_seconds: float = _get_float("LLM_TIMEOUT_SECONDS", 180.0)
@@ -45,6 +45,7 @@ class Settings:
     history_limit: int = _get_int("CHAT_HISTORY_LIMIT", _get_int("HISTORY_LIMIT", 5))
     default_assistant_mode: str = os.getenv("DEFAULT_ASSISTANT_MODE", "simple").lower()
     enable_refine_mode: bool = _get_bool("ENABLE_REFINE_MODE", True)
+    enable_thinking_mode: bool = _get_bool("ENABLE_THINKING_MODE", True)
     api_host: str = os.getenv("API_HOST", "0.0.0.0")
     api_port: int = _get_int("API_PORT", 8000)
     embedder_api_host: str = os.getenv("EMBEDDER_API_HOST", "0.0.0.0")
@@ -140,6 +141,8 @@ class Settings:
         modes = ["simple"]
         if self.enable_refine_mode:
             modes.append("refine")
+        if self.enable_thinking_mode:
+            modes.append("thinking")
         return modes
 
 

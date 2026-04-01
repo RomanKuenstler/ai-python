@@ -12,6 +12,16 @@ import { Icon } from "../common/Icons";
 import { Dialog } from "../common/Dialog";
 import { FilterTables } from "../filters/FilterTables";
 
+function describeAssistantMode(mode: AssistantMode) {
+  if (mode === "simple") {
+    return "Single-step retrieval and answer generation.";
+  }
+  if (mode === "refine") {
+    return "Two-stage draft and refinement pipeline.";
+  }
+  return "Three-stage planning, drafting, and refinement pipeline.";
+}
+
 type PreferencesDialogProps = {
   initialTab?: "general" | "personalization" | "settings" | "filter" | "archive";
   archivedChats: Chat[];
@@ -231,7 +241,7 @@ export function PreferencesDialog({
                 {availableModes.map((mode) => (
                   <div key={mode} className="preferences-mode-card assistant-mode-card">
                     <strong>{mode}</strong>
-                    <span>{mode === "simple" ? "Single-step retrieval and answer generation." : "Two-stage draft and refinement pipeline."}</span>
+                    <span>{describeAssistantMode(mode)}</span>
                   </div>
                 ))}
               </div>
