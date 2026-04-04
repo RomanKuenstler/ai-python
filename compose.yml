@@ -14,6 +14,8 @@ services:
       - ./data:/app/data
       - .:/app
     restart: unless-stopped
+    models:
+      - embedding-model
 
   retriever-api:
     build:
@@ -31,6 +33,8 @@ services:
     volumes:
       - ./data:/app/data
       - .:/app
+    models:
+      - llm-model
 
   retriever:
     build:
@@ -50,6 +54,8 @@ services:
     volumes:
       - ./data:/app/data
       - .:/app
+    models:
+      - llm-model
 
   webui:
     build:
@@ -88,6 +94,12 @@ services:
       - "6333:6333"
     volumes:
       - qdrant_data:/qdrant/storage
+
+models:
+  embedding-model:
+    model: docker.io/ai/embeddinggemma:latest
+  llm-model:
+    model: huggingface.co/qwen/qwen2.5-coder-3b-instruct-gguf:Q4_K_M
 
 volumes:
   qdrant_data:
